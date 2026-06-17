@@ -110,7 +110,7 @@ export default function SettingsTab({
 
   const handleExportRecipes = () => {
     const payload = {
-      app: "Ce Lim's Kitchen",
+      app: "MiseChef",
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
       data: {
@@ -123,7 +123,7 @@ export default function SettingsTab({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ce-lims-kitchen-recipes-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `misechef-recipes-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
     setDataMessage(`Exported ${recipes.length} recipes, ${categories.length} categories, and profile.`);
@@ -156,7 +156,7 @@ export default function SettingsTab({
         const parsed = JSON.parse(String(event.target?.result || ''));
         const importedData = parseImportedAppData(parsed);
 
-        if (!window.confirm("Import this Ce Lim's Kitchen data file?")) {
+        if (!window.confirm("Import this MiseChef data file?")) {
           return;
         }
 
@@ -191,7 +191,7 @@ export default function SettingsTab({
   };
 
   const handleResetApp = () => {
-    if (!window.confirm("Reset Ce Lim's Kitchen? This will clear all local recipes, categories, profile, and settings.")) {
+    if (!window.confirm("Reset MiseChef? This will clear all local recipes, categories, profile, and settings.")) {
       return;
     }
 

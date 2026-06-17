@@ -19,7 +19,7 @@ const linkButtonClass =
   'font-sans text-xs font-extrabold text-primary hover:text-primary-container transition-colors';
 
 function AuthHeader({
-  eyebrow = 'Ce Lim\'s Kitchen',
+  eyebrow = 'by Ce Lim',
   title,
   subtitle,
 }: {
@@ -90,8 +90,8 @@ export default function LoginTab() {
             {view === 'welcome' ? (
               <>
                 <AuthHeader
-                  title="Ce Lim's Kitchen"
-                  subtitle="Professional Recipe Management for Chefs"
+                  title="MiseChef"
+                  subtitle="Everything in its place."
                 />
 
                 <div className="space-y-3">

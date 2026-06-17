@@ -18,7 +18,7 @@ interface HeaderProps {
 }
 
 export default function Header({
-  title = "Ce Lim's Kitchen",
+  title = "MiseChef",
   isSubpage = false,
   onBack,
   rightAction,
@@ -52,12 +52,12 @@ export default function Header({
           )}
           
           <div className="leading-tight">
-            <h1 className={`text-xl sm:text-2xl text-primary font-semibold tracking-tight ${title === "Ce Lim's Kitchen" ? "font-display italic" : "font-display"}`}>
+            <h1 className={`text-xl sm:text-2xl text-primary font-semibold tracking-tight ${title === "MiseChef" ? "font-display italic" : "font-display"}`}>
               {title}
             </h1>
             {!isSubpage && (
               <p className="font-sans text-[10px] sm:text-xs text-secondary font-bold tracking-wide">
-                Cook with love, eat with joy.
+                Everything in its place. · by Ce Lim
               </p>
             )}
           </div>

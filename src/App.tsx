@@ -422,7 +422,7 @@ export default function App() {
 
     // Default main navigation header
     return {
-      title: "Ce Lim's Kitchen",
+      title: "MiseChef",
       isSubpage: false,
       activeTab: activeTab,
       onMenuClick: () => setIsNavigationDrawerOpen(true)

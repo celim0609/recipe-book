@@ -105,10 +105,10 @@ export default function NavigationDrawer({
                   Menu
                 </p>
                 <h2 className="font-display italic text-2xl text-primary font-semibold">
-                  Ce Lim's Kitchen
+                  MiseChef
                 </h2>
                 <p className="font-sans text-xs text-on-surface-variant font-bold">
-                  Cook with love, eat with joy.
+                  Everything in its place. · by Ce Lim
                 </p>
               </div>
               <button
