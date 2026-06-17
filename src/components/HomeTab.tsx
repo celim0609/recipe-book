@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
-import { Heart, Play } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Heart, Play, Search } from 'lucide-react';
 import { Recipe } from '../types';
 
 interface ChefProfile {
@@ -46,6 +46,27 @@ export default function HomeTab({
   const chefRecipes = recipes;
   const activeFilterLabel = isFavoritesFilter ? 'Favorites' : selectedCategory;
   const [profile, setProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const searchedRecipes = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return chefRecipes;
+
+    return chefRecipes.filter(recipe => {
+      const ingredientText = recipe.ingredients
+        .map(ingredient => `${ingredient.qty} ${ingredient.unit} ${ingredient.name}`)
+        .join(' ');
+      const tagText = recipe.tags?.join(' ') || '';
+      const searchableText = [
+        recipe.title,
+        recipe.category,
+        ingredientText,
+        tagText
+      ].join(' ').toLowerCase();
+
+      return searchableText.includes(query);
+    });
+  }, [chefRecipes, searchQuery]);
 
   useEffect(() => {
     const cachedProfile = localStorage.getItem(CHEF_PROFILE_STORAGE_KEY);
@@ -138,13 +159,29 @@ export default function HomeTab({
 
       {/* Recipes Grid Section */}
       <section className="space-y-4">
-        <div className="flex justify-between items-baseline">
-          <h3 className="font-display text-2xl font-bold text-primary tracking-tight">My Kitchen</h3>
-          {chefRecipes.length > 0 && (
-            <span className="text-secondary font-sans font-bold text-sm">
-              {activeFilterLabel ? `${activeFilterLabel} (${chefRecipes.length})` : `Primary Library (${chefRecipes.length})`}
-            </span>
-          )}
+        <div className="space-y-4">
+          <div className="flex justify-between items-baseline">
+            <h3 className="font-display text-2xl font-bold text-primary tracking-tight">My Kitchen</h3>
+            {chefRecipes.length > 0 && (
+              <span className="text-secondary font-sans font-bold text-sm">
+                {activeFilterLabel
+                  ? `${activeFilterLabel} (${searchedRecipes.length}/${chefRecipes.length})`
+                  : `Primary Library (${searchedRecipes.length}/${chefRecipes.length})`}
+              </span>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="Search recipes, ingredients, categories, or tags..."
+              className="w-full bg-white border border-surface-container-high rounded-2xl pl-11 pr-4 py-3.5 text-sm font-sans font-bold text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-primary outline-none transition-all"
+              aria-label="Search recipes"
+            />
+          </div>
         </div>
 
         {chefRecipes.length === 0 ? (
@@ -163,9 +200,21 @@ export default function HomeTab({
               </p>
             </div>
           </div>
+        ) : searchedRecipes.length === 0 ? (
+          <div className="bg-surface-container-low border border-dashed border-outline-variant rounded-2xl py-16 px-4 text-center max-w-2xl mx-auto flex flex-col items-center justify-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <Search className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="font-display font-bold text-lg text-primary">No recipes found.</h4>
+              <p className="font-sans text-xs sm:text-sm text-on-surface-variant/90 max-w-md mx-auto leading-relaxed font-semibold">
+                Try searching by recipe title, ingredient, category, or tag.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {chefRecipes.map(recipe => (
+            {searchedRecipes.map(recipe => (
               <div
                 key={recipe.id}
                 onClick={() => onSelectRecipe(recipe)}
