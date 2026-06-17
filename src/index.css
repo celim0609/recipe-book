@@ -70,6 +70,34 @@ body {
   font-weight: 600;
 }
 
+.brand-logo {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.brand-logo-dark {
+  display: none;
+}
+
+:root[data-appearance="dark"] .brand-logo-light {
+  display: none;
+}
+
+:root[data-appearance="dark"] .brand-logo-dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-appearance="system"] .brand-logo-light {
+    display: none;
+  }
+
+  :root[data-appearance="system"] .brand-logo-dark {
+    display: block;
+  }
+}
+
 :root[data-appearance="dark"] {
   --color-primary: #ffffff;
   --color-on-primary: #ffffff;

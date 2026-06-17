@@ -6,7 +6,7 @@
 import React from 'react';
 import { Menu, ArrowLeft } from 'lucide-react';
 import { RootTab } from '../types';
-import miseChefLogo from '../assets/logo.png';
+import BrandLogo from './BrandLogo';
 
 interface HeaderProps {
   title?: string;
@@ -54,11 +54,7 @@ export default function Header({
           
           <div className="flex items-center gap-2.5 min-w-0">
             {title === "MiseChef" && (
-              <img
-                src={miseChefLogo}
-                alt="MiseChef logo"
-                className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0"
-              />
+              <BrandLogo className="h-8 sm:h-9 w-auto shrink-0" />
             )}
             <div className="leading-tight min-w-0">
               <h1 className={`text-xl sm:text-2xl text-primary font-semibold tracking-tight ${title === "MiseChef" ? "font-display italic" : "font-display"}`}>

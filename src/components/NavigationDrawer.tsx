@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { RecipeCategory, RootTab } from '../types';
-import miseChefLogo from '../assets/logo.png';
+import BrandLogo from './BrandLogo';
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -102,11 +102,7 @@ export default function NavigationDrawer({
           >
             <div className="px-5 pt-5 pb-4 border-b border-surface-container-high flex items-start justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={miseChefLogo}
-                  alt="MiseChef logo"
-                  className="w-10 h-10 object-contain shrink-0"
-                />
+                <BrandLogo className="h-8 w-auto shrink-0" />
                 <div className="min-w-0">
                   <p className="font-sans text-[10px] font-extrabold uppercase tracking-[0.2em] text-secondary">
                     Menu

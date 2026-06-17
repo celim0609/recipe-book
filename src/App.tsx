@@ -18,7 +18,7 @@ import LoginTab from './components/LoginTab';
 import FavoritesTab from './components/FavoritesTab';
 import StatisticsTab from './components/StatisticsTab';
 import { AnimatePresence, motion } from 'motion/react';
-import miseChefLogo from './assets/logo.png';
+import BrandLogo from './components/BrandLogo';
 
 const STORAGE_RECIPES_KEY = 'my_cookbook_recipes_v2';
 const STORAGE_CATEGORIES_KEY = 'ce_lims_kitchen_categories_v1';
@@ -35,11 +35,7 @@ function BrandLoadingScreen() {
         transition={{ duration: 0.25, ease: 'easeOut' }}
         className="flex flex-col items-center gap-4 text-center"
       >
-        <img
-          src={miseChefLogo}
-          alt="MiseChef logo"
-          className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
-        />
+        <BrandLogo className="h-8 w-auto" />
         <div className="space-y-1">
           <h1 className="font-display italic text-4xl text-primary font-semibold">
             MiseChef
