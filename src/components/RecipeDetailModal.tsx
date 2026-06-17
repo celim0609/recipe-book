@@ -189,7 +189,7 @@ export default function RecipeDetailModal({
                 {recipe.category.toUpperCase()}
               </span>
 
-              <h2 className="font-display font-medium text-2xl sm:text-3xl text-primary leading-tight">
+              <h2 className="font-display font-semibold text-2xl sm:text-3xl text-primary leading-tight">
                 {recipe.title}
               </h2>
 

@@ -283,7 +283,7 @@ export default function SearchTab({
                   <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-sans text-[10px] font-bold">
                     {recipe.category}
                   </span>
-                  <h3 className="font-display font-medium text-base text-primary leading-snug group-hover:text-secondary duration-300 transition-colors line-clamp-1">
+                  <h3 className="font-display font-semibold text-base text-primary leading-snug group-hover:text-secondary duration-300 transition-colors line-clamp-1">
                     {recipe.title}
                   </h3>
                   <div className="flex items-center gap-1.5 text-xs text-outline font-semibold">

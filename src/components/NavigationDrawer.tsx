@@ -104,7 +104,7 @@ export default function NavigationDrawer({
                 <p className="font-sans text-[10px] font-extrabold uppercase tracking-[0.2em] text-secondary">
                   Menu
                 </p>
-                <h2 className="font-display italic text-2xl text-primary font-medium">
+                <h2 className="font-display italic text-2xl text-primary font-semibold">
                   Ce Lim's Kitchen
                 </h2>
                 <p className="font-sans text-xs text-on-surface-variant font-bold">

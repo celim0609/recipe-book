@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400..900;1,400..900&family=Nunito+Sans:ital,wght@0,200..1000;1,200..1000&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Nunito+Sans:ital,wght@0,200..1000;1,200..1000&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -42,7 +42,7 @@
   --color-outline: #737971;
   --color-outline-variant: #c3c8c0;
 
-  --font-display: "Literata", Georgia, serif;
+  --font-display: "Cormorant Garamond", Georgia, serif;
   --font-sans: "Nunito Sans", system-ui, sans-serif;
   
   --animate-fade-in: fade-in 0.3s ease-out;
@@ -64,6 +64,10 @@ body {
   background-color: var(--color-background);
   color: var(--color-on-background);
   min-height: 100vh;
+}
+
+.font-display {
+  font-weight: 600;
 }
 
 :root[data-appearance="dark"] {

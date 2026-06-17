@@ -52,7 +52,7 @@ export default function Header({
           )}
           
           <div className="leading-tight">
-            <h1 className={`text-xl sm:text-2xl text-primary font-medium tracking-tight ${title === "Ce Lim's Kitchen" ? "font-display italic" : "font-display"}`}>
+            <h1 className={`text-xl sm:text-2xl text-primary font-semibold tracking-tight ${title === "Ce Lim's Kitchen" ? "font-display italic" : "font-display"}`}>
               {title}
             </h1>
             {!isSubpage && (
