@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Home } from 'lucide-react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { Recipe, RecipeCategory, RootTab } from './types';
 import { INITIAL_COLLECTIONS, INITIAL_RECIPES } from './data';
 import Header from './components/Header';
@@ -19,6 +20,7 @@ import FavoritesTab from './components/FavoritesTab';
 import StatisticsTab from './components/StatisticsTab';
 import { AnimatePresence, motion } from 'motion/react';
 import BrandLogo from './components/BrandLogo';
+import { auth } from './firebase';
 
 const STORAGE_RECIPES_KEY = 'my_cookbook_recipes_v2';
 const STORAGE_CATEGORIES_KEY = 'ce_lims_kitchen_categories_v1';
@@ -85,6 +87,7 @@ export default function App() {
   const [selectedHomeCategory, setSelectedHomeCategory] = useState<string | null>(null);
   const [isFavoritesFilterActive, setIsFavoritesFilterActive] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   // Notification states
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -131,6 +134,11 @@ export default function App() {
     }
 
     setIsAppReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!auth) return;
+    return onAuthStateChanged(auth, setCurrentUser);
   }, []);
 
   // Save changes helper
@@ -360,6 +368,20 @@ export default function App() {
     triggerNotification('Reset complete. Local app data has been cleared.', 'info');
   };
 
+  const handleSignOut = async () => {
+    if (!auth) {
+      triggerNotification('Firebase is not configured yet.', 'info');
+      return;
+    }
+
+    try {
+      await signOut(auth);
+      triggerNotification('Signed out successfully.', 'info');
+    } catch (err) {
+      triggerNotification('Unable to sign out. Please try again.', 'error');
+    }
+  };
+
   const homeRecipes = isFavoritesFilterActive
     ? recipes.filter(recipe => recipe.isSaved)
     : selectedHomeCategory
@@ -416,10 +438,12 @@ export default function App() {
             onImportAppData={handleImportAppData}
             onResetApp={handleResetApp}
             onOpenLogin={() => setActiveTab('login')}
+            currentUser={currentUser}
+            onSignOut={handleSignOut}
           />
         );
       case 'login':
-        return <LoginTab />;
+        return <LoginTab currentUser={currentUser} />;
       default:
         return null;
     }

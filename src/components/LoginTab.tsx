@@ -11,6 +11,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import BrandLogo from './BrandLogo';
 import { auth, isFirebaseConfigured } from '../firebase';
 
@@ -104,7 +105,11 @@ const getAuthErrorMessage = (error: unknown) => {
   }
 };
 
-export default function LoginTab() {
+interface LoginTabProps {
+  currentUser: User | null;
+}
+
+export default function LoginTab({ currentUser }: LoginTabProps) {
   const [view, setView] = useState<AuthView>('welcome');
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
@@ -208,7 +213,7 @@ export default function LoginTab() {
               <>
                 <AuthHeader
                   title="MiseChef"
-                  subtitle="Everything in its place."
+                  subtitle={currentUser?.email ? `Signed in as ${currentUser.email}` : 'Everything in its place.'}
                 />
 
                 <div className="space-y-3">

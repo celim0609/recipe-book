@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Camera, Download, RotateCcw, Upload } from 'lucide-react';
+import type { User } from 'firebase/auth';
 import { Recipe, RecipeCategory } from '../types';
 
 const CHEF_PROFILE_STORAGE_KEY = 'ce_lims_kitchen_chef_profile_v1';
@@ -28,6 +29,8 @@ interface SettingsTabProps {
   onImportAppData: (data: ImportedAppData, mode: 'merge' | 'replace') => void;
   onResetApp: () => void;
   onOpenLogin: () => void;
+  currentUser: User | null;
+  onSignOut: () => void;
 }
 
 export interface ImportedAppData {
@@ -54,7 +57,9 @@ export default function SettingsTab({
   categories,
   onImportAppData,
   onResetApp,
-  onOpenLogin
+  onOpenLogin,
+  currentUser,
+  onSignOut
 }: SettingsTabProps) {
   const [profile, setProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>('system');
@@ -344,15 +349,23 @@ export default function SettingsTab({
 
       <section className={sectionClass}>
         <h3 className={sectionTitleClass}>Account</h3>
+        <p className="font-sans text-xs font-bold text-on-surface-variant">
+          {currentUser?.email ? `Signed in as ${currentUser.email}` : 'Cloud Sync is available after signing in.'}
+        </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             onClick={onOpenLogin}
             className="rounded-full bg-surface-container text-primary px-5 py-3 text-xs font-sans font-bold"
           >
-            Login (Coming Soon)
+            {currentUser ? 'Manage Login' : 'Login'}
           </button>
-          <button type="button" disabled className="rounded-full bg-surface-container-high text-outline px-5 py-3 text-xs font-sans font-bold cursor-not-allowed">
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={!currentUser}
+            className="rounded-full bg-surface-container-high text-outline px-5 py-3 text-xs font-sans font-bold disabled:cursor-not-allowed disabled:opacity-70"
+          >
             Sign Out
           </button>
         </div>
