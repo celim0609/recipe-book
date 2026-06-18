@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, Camera, FileText, Image as ImageIcon, Plus, Trash2,
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Recipe, Ingredient, MethodStep, RecipeCategory } from '../types';
+import { parseIngredientLines } from '../utils/ingredientParser';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -55,31 +56,6 @@ const cleanImportedLine = (line: string) => {
 const isSectionHeading = (line: string, keywords: string[]) => {
   const normalized = line.toLowerCase().replace(/[:：]/g, '').trim();
   return keywords.some(keyword => normalized === keyword);
-};
-
-const parseIngredientLine = (line: string, index: number): Ingredient => {
-  const cleaned = cleanImportedLine(line);
-  const match = cleaned.match(/^([\d./\s]+)?\s*([a-zA-Z]+)?\s+(.+)$/);
-
-  if (!match) {
-    return { id: `ing_import_${Date.now()}_${index}`, name: cleaned, qty: '', unit: '' };
-  }
-
-  const qty = (match[1] || '').trim();
-  const possibleUnit = (match[2] || '').trim();
-  const name = (match[3] || cleaned).trim();
-  const knownUnits = ['g', 'kg', 'ml', 'l', 'L', 'pcs', 'pc', 'cup', 'cups', 'tbsp', 'tsp'];
-
-  if (!qty || !knownUnits.includes(possibleUnit)) {
-    return { id: `ing_import_${Date.now()}_${index}`, name: cleaned, qty: '', unit: '' };
-  }
-
-  return {
-    id: `ing_import_${Date.now()}_${index}`,
-    name,
-    qty,
-    unit: possibleUnit
-  };
 };
 
 const parsePastedRecipe = (rawText: string) => {
@@ -157,9 +133,7 @@ const parsePastedRecipe = (rawText: string) => {
   return {
     title: parsedTitle,
     yield: parsedYield,
-    ingredients: ingredientLines
-      .map((line, index) => parseIngredientLine(line, index))
-      .filter(ingredient => ingredient.name.trim()),
+    ingredients: parseIngredientLines(ingredientLines),
     method: methodLines
       .map(cleanImportedLine)
       .filter(Boolean)
@@ -927,13 +901,13 @@ Rules:
         
         <div className="space-y-2.5" id="ingredient-list">
           {ingredients.map((ing) => (
-            <div key={ing.id} className="grid grid-cols-[1fr_80px_100px_40px] gap-2 items-center animate-fade-in">
+            <div key={ing.id} className="grid grid-cols-2 sm:grid-cols-[1fr_80px_100px_1fr_40px] gap-2 items-center animate-fade-in">
               <input
                 type="text"
                 placeholder="Ingredient name (e.g., Fresh Basil)"
                 value={ing.name}
                 onChange={e => updateIngredient(ing.id, 'name', e.target.value)}
-                className="bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm p-4 font-semibold"
+                className="bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm p-4 font-semibold col-span-2 sm:col-span-1"
               />
               <input
                 type="text"
@@ -950,11 +924,18 @@ Rules:
                 onChange={e => updateIngredient(ing.id, 'unit', e.target.value)}
                 className="bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm p-4 font-semibold text-center"
               />
+              <input
+                type="text"
+                placeholder="Notes"
+                value={ing.notes || ''}
+                onChange={e => updateIngredient(ing.id, 'notes', e.target.value)}
+                className="bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm p-4 font-semibold col-span-2 sm:col-span-1"
+              />
               <button
                 type="button"
                 onClick={() => removeIngredientRow(ing.id)}
                 disabled={ingredients.length === 1}
-                className="text-outline hover:text-error transition-colors p-2 flex items-center justify-center disabled:opacity-30"
+                className="text-outline hover:text-error transition-colors p-2 flex items-center justify-center disabled:opacity-30 col-span-2 sm:col-span-1"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -967,6 +948,10 @@ Rules:
           <option value="ml" />
           <option value="L" />
           <option value="pcs" />
+          <option value="cloves" />
+          <option value="tsp" />
+          <option value="tbsp" />
+          <option value="cups" />
         </datalist>
 
         <button
@@ -1257,6 +1242,7 @@ Rules:
                                         {recipe.ingredients.slice(0, 5).map(ingredient => (
                                           <li key={ingredient.id} className="font-sans text-xs font-semibold text-on-surface">
                                             {[ingredient.qty, ingredient.unit, ingredient.name].filter(Boolean).join(' ')}
+                                            {ingredient.notes ? ` (${ingredient.notes})` : ''}
                                           </li>
                                         ))}
                                       </ul>

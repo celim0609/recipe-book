@@ -319,6 +319,9 @@ export default function RecipeDetailModal({
                         checkedIngredients.includes(ing.id) ? 'line-through text-outline' : 'text-on-surface'
                       }`}>
                         {ing.name}
+                        {ing.notes ? (
+                          <span className="text-xs text-on-surface-variant font-medium"> ({ing.notes})</span>
+                        ) : null}
                       </span>
                     </div>
                     <span className="text-sm font-bold text-secondary font-sans block bg-secondary/5 px-2.5 py-0.5 rounded-md">

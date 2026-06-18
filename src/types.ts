@@ -8,6 +8,7 @@ export interface Ingredient {
   name: string;
   qty: string;
   unit: string;
+  notes?: string;
 }
 
 export interface MethodStep {
