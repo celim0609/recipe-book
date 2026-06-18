@@ -173,7 +173,7 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [collections] = useState(INITIAL_COLLECTIONS);
   const [categories, setCategories] = useState<RecipeCategory[]>([]);
-  const [activeTab, setActiveTab] = useState<RootTab>('home');
+  const [activeTab, setActiveTab] = useState<RootTab>('login');
   const [addingRecipe, setAddingRecipe] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
@@ -181,6 +181,8 @@ export default function App() {
   const [selectedHomeCategory, setSelectedHomeCategory] = useState<string | null>(null);
   const [isFavoritesFilterActive, setIsFavoritesFilterActive] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   
@@ -233,8 +235,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, setCurrentUser);
+    if (!auth) {
+      setCurrentUser(null);
+      setIsAuthReady(true);
+      setActiveTab('login');
+      window.history.replaceState(null, '', '/login');
+      return;
+    }
+
+    return onAuthStateChanged(auth, user => {
+      setCurrentUser(user);
+      setIsAuthReady(true);
+
+      if (user) {
+        setIsGuestMode(false);
+        setActiveTab('home');
+        window.history.replaceState(null, '', '/');
+        return;
+      }
+
+      setAddingRecipe(false);
+      setEditingRecipe(null);
+      setSelectedRecipe(null);
+      setIsNavigationDrawerOpen(false);
+      setSelectedHomeCategory(null);
+      setIsFavoritesFilterActive(false);
+      setIsGuestMode(false);
+      setActiveTab('login');
+      window.history.replaceState(null, '', '/login');
+    });
   }, []);
 
   useEffect(() => {
@@ -244,7 +273,20 @@ export default function App() {
   }, [activeTab, currentUser]);
 
   useEffect(() => {
-    if (!currentUser || !db) return;
+    if (!isAuthReady || currentUser || isGuestMode || activeTab === 'login') return;
+
+    setAddingRecipe(false);
+    setEditingRecipe(null);
+    setSelectedRecipe(null);
+    setIsNavigationDrawerOpen(false);
+    setSelectedHomeCategory(null);
+    setIsFavoritesFilterActive(false);
+    setActiveTab('login');
+    window.history.replaceState(null, '', '/login');
+  }, [activeTab, currentUser, isAuthReady, isGuestMode]);
+
+  useEffect(() => {
+    if (!currentUser || !db || isGuestMode) return;
 
     let isCancelled = false;
 
@@ -253,7 +295,7 @@ export default function App() {
         await createUserDocument(currentUser);
         const cloudRecipes = await loadFirestoreRecipes(currentUser);
 
-        if (!isCancelled && cloudRecipes.length > 0) {
+        if (!isCancelled) {
           setRecipes(cloudRecipes);
         }
       } catch (err) {
@@ -268,7 +310,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [currentUser]);
+  }, [currentUser, isGuestMode]);
 
   // Save changes helper
   const saveRecipesToStorage = (newList: Recipe[]) => {
@@ -363,19 +405,21 @@ export default function App() {
   // Add Recipe
   const handleSaveNewRecipe = async (newRecipe: Recipe) => {
     const updated = [newRecipe, ...recipes];
-    saveRecipesToStorage(updated);
+    setRecipes(updated);
 
     setAddingRecipe(false);
     setActiveTab('home');
 
-    if (currentUser && db) {
+    if (currentUser && db && !isGuestMode) {
       try {
         await saveRecipeToFirestore(newRecipe, currentUser);
         triggerNotification(`Saved "${newRecipe.title}" to your cookbook.`, 'success');
       } catch (err) {
+        localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(updated));
         triggerNotification(`Saved "${newRecipe.title}" locally. Cloud save failed for now.`, 'info');
       }
     } else {
+      localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(updated));
       triggerNotification(`Saved "${newRecipe.title}" locally. Sign in to save future recipes to cloud.`, 'success');
     }
   };
@@ -516,7 +560,17 @@ export default function App() {
 
     try {
       await signOut(auth);
+      setCurrentUser(null);
+      setIsGuestMode(false);
       setRecipes(loadLocalRecipes());
+      setAddingRecipe(false);
+      setEditingRecipe(null);
+      setSelectedRecipe(null);
+      setIsNavigationDrawerOpen(false);
+      setSelectedHomeCategory(null);
+      setIsFavoritesFilterActive(false);
+      setActiveTab('login');
+      window.history.replaceState(null, '', '/login');
       triggerNotification('Signed out successfully.', 'info');
     } catch (err) {
       triggerNotification('Unable to sign out. Please try again.', 'error');
@@ -530,7 +584,31 @@ export default function App() {
       : recipes;
 
   // Renders correct active screen body
+  const handleAuthenticated = () => {
+    setIsGuestMode(false);
+    setActiveTab('home');
+    window.history.replaceState(null, '', '/');
+  };
+
+  const handleContinueAsGuest = () => {
+    setCurrentUser(null);
+    setIsGuestMode(true);
+    setRecipes(loadLocalRecipes());
+    setActiveTab('home');
+    window.history.replaceState(null, '', '/');
+  };
+
   const renderTabContent = () => {
+    if (!currentUser && !isGuestMode) {
+      return (
+        <LoginTab
+          currentUser={currentUser}
+          onAuthenticated={handleAuthenticated}
+          onContinueAsGuest={handleContinueAsGuest}
+        />
+      );
+    }
+
     switch (activeTab) {
       case 'home':
         return (
@@ -602,7 +680,13 @@ export default function App() {
           );
         }
 
-        return <LoginTab currentUser={currentUser} onAuthenticated={() => setActiveTab('home')} />;
+        return (
+          <LoginTab
+            currentUser={currentUser}
+            onAuthenticated={handleAuthenticated}
+            onContinueAsGuest={handleContinueAsGuest}
+          />
+        );
       default:
         return null;
     }
@@ -641,7 +725,9 @@ export default function App() {
     };
   };
 
-  if (!isAppReady) {
+  const isProtectedShellVisible = currentUser || isGuestMode;
+
+  if (!isAppReady || !isAuthReady) {
     return <BrandLoadingScreen />;
   }
 
@@ -650,7 +736,7 @@ export default function App() {
       {/* Dynamic Header */}
       <Header {...getHeaderProps()} />
 
-      {!addingRecipe && !editingRecipe && (
+      {isProtectedShellVisible && !addingRecipe && !editingRecipe && (
         <NavigationDrawer
           isOpen={isNavigationDrawerOpen}
           categories={categories}
@@ -719,7 +805,7 @@ export default function App() {
       </main>
 
       {/* Responsive Bottom Navigation Bar Block (Mobile size, Tablet uses top) */}
-      {!addingRecipe && !editingRecipe && (
+      {isProtectedShellVisible && !addingRecipe && !editingRecipe && (
         <nav className="fixed bottom-0 left-0 w-full z-45 flex justify-around items-center px-4 pb-4 pt-3 bg-surface/90 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_24px_rgba(62,86,65,0.08)] md:hidden border-t border-surface-container-high transition-transform">
           <button
             onClick={() => {
@@ -748,7 +834,7 @@ export default function App() {
       )}
 
       {/* Persistent Desktop & Mobile Contextual floating Add Button (FAB) (Matches screenshot button!) */}
-      {!addingRecipe && !editingRecipe && (
+      {isProtectedShellVisible && !addingRecipe && !editingRecipe && (
         <button
           onClick={() => setAddingRecipe(true)}
           id="persistent-fab-add-recipe"

@@ -116,9 +116,10 @@ const getAuthErrorMessage = (error: unknown) => {
 interface LoginTabProps {
   currentUser: User | null;
   onAuthenticated: () => void;
+  onContinueAsGuest: () => void;
 }
 
-export default function LoginTab({ currentUser, onAuthenticated }: LoginTabProps) {
+export default function LoginTab({ currentUser, onAuthenticated, onContinueAsGuest }: LoginTabProps) {
   const [view, setView] = useState<AuthView>('welcome');
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
@@ -262,7 +263,7 @@ export default function LoginTab({ currentUser, onAuthenticated }: LoginTabProps
                   </button>
                   <button
                     type="button"
-                    onClick={() => switchView('guest')}
+                    onClick={onContinueAsGuest}
                     className={secondaryButtonClass}
                   >
                     Continue as Guest
