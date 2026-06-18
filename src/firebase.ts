@@ -35,8 +35,8 @@ export const auth: Auth | null = firebaseApp ? getAuth(firebaseApp) : null;
 export const db: Firestore | null = firebaseApp ? getFirestore(firebaseApp) : null;
 export const storage: FirebaseStorage | null = firebaseApp ? getStorage(firebaseApp) : null;
 
-if (auth) {
-  setPersistence(auth, browserLocalPersistence).catch(() => {
-    // Firebase will fall back to its default persistence if local persistence is unavailable.
-  });
-}
+export const authPersistenceReady = auth
+  ? setPersistence(auth, browserLocalPersistence).catch(() => {
+      // Firebase will fall back to its default persistence if local persistence is unavailable.
+    })
+  : Promise.resolve();

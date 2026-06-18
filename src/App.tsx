@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Home } from 'lucide-react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signOut, type Unsubscribe, type User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { Recipe, RecipeCategory, RootTab } from './types';
 import { INITIAL_COLLECTIONS, INITIAL_RECIPES } from './data';
@@ -21,7 +21,7 @@ import FavoritesTab from './components/FavoritesTab';
 import StatisticsTab from './components/StatisticsTab';
 import { AnimatePresence, motion } from 'motion/react';
 import BrandLogo from './components/BrandLogo';
-import { auth, db } from './firebase';
+import { auth, authPersistenceReady, db } from './firebase';
 
 const STORAGE_RECIPES_KEY = 'my_cookbook_recipes_v2';
 const STORAGE_CATEGORIES_KEY = 'ce_lims_kitchen_categories_v1';
@@ -243,27 +243,50 @@ export default function App() {
       return;
     }
 
-    return onAuthStateChanged(auth, user => {
-      setCurrentUser(user);
-      setIsAuthReady(true);
+    let isCancelled = false;
+    let unsubscribeAuth: Unsubscribe | null = null;
 
-      if (user) {
-        setIsGuestMode(false);
-        setActiveTab('home');
-        window.history.replaceState(null, '', '/');
-        return;
+    const initializeAuth = async () => {
+      try {
+        await authPersistenceReady;
+        await getRedirectResult(auth);
+      } catch (err) {
+        if (!isCancelled) {
+          triggerNotification('Google sign-in could not be completed. Please try again.', 'error');
+        }
+      } finally {
+        if (isCancelled) return;
+
+        unsubscribeAuth = onAuthStateChanged(auth, user => {
+          setCurrentUser(user);
+          setIsAuthReady(true);
+
+          if (user) {
+            setIsGuestMode(false);
+            setActiveTab('home');
+            window.history.replaceState(null, '', '/');
+            return;
+          }
+
+          setAddingRecipe(false);
+          setEditingRecipe(null);
+          setSelectedRecipe(null);
+          setIsNavigationDrawerOpen(false);
+          setSelectedHomeCategory(null);
+          setIsFavoritesFilterActive(false);
+          setIsGuestMode(false);
+          setActiveTab('login');
+          window.history.replaceState(null, '', '/login');
+        });
       }
+    };
 
-      setAddingRecipe(false);
-      setEditingRecipe(null);
-      setSelectedRecipe(null);
-      setIsNavigationDrawerOpen(false);
-      setSelectedHomeCategory(null);
-      setIsFavoritesFilterActive(false);
-      setIsGuestMode(false);
-      setActiveTab('login');
-      window.history.replaceState(null, '', '/login');
-    });
+    initializeAuth();
+
+    return () => {
+      isCancelled = true;
+      unsubscribeAuth?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -424,16 +447,28 @@ export default function App() {
     }
   };
 
-  const handleSaveEditedRecipe = (updatedRecipe: Recipe) => {
+  const handleSaveEditedRecipe = async (updatedRecipe: Recipe) => {
     const updated = recipes.map(recipe =>
       recipe.id === updatedRecipe.id ? updatedRecipe : recipe
     );
-    saveRecipesToStorage(updated);
+    setRecipes(updated);
 
     setEditingRecipe(null);
     setSelectedRecipe(updatedRecipe);
     setActiveTab('home');
-    triggerNotification(`Updated "${updatedRecipe.title}".`, 'success');
+
+    if (currentUser && db && !isGuestMode) {
+      try {
+        await saveRecipeToFirestore(updatedRecipe, currentUser);
+        triggerNotification(`Updated "${updatedRecipe.title}".`, 'success');
+      } catch (err) {
+        localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(updated));
+        triggerNotification(`Updated "${updatedRecipe.title}" locally. Cloud sync failed for now.`, 'info');
+      }
+    } else {
+      localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(updated));
+      triggerNotification(`Updated "${updatedRecipe.title}".`, 'success');
+    }
   };
 
   const handleStartEditRecipe = (recipe: Recipe) => {

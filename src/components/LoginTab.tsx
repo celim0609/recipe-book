@@ -11,6 +11,7 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   updateProfile
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -175,9 +176,27 @@ export default function LoginTab({ currentUser, onAuthenticated, onContinueAsGue
       setAuthMessage('Signed in with Google successfully.');
       onAuthenticated();
     } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+      if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectError) {
+          setAuthError(getAuthErrorMessage(redirectError));
+          setIsSubmitting(false);
+          return;
+        }
+      }
       setAuthError(getAuthErrorMessage(error));
-    } finally {
       setIsSubmitting(false);
+    } finally {
+      if (auth.currentUser) {
+        setAuthMessage('Signed in with Google successfully.');
+        onAuthenticated();
+        setIsSubmitting(false);
+      }
     }
   };
 
