@@ -21,6 +21,7 @@ interface NavigationDrawerProps {
   onSelectCategory: (categoryName: string | null) => void;
   onSelectFavorites: () => void;
   currentUser: User | null;
+  customAvatarUrl?: string;
   onSignOut: () => void;
 }
 
@@ -35,6 +36,7 @@ export default function NavigationDrawer({
   onSelectCategory,
   onSelectFavorites,
   currentUser,
+  customAvatarUrl = '',
   onSignOut
 }: NavigationDrawerProps) {
   const [categoriesOpen, setCategoriesOpen] = useState(true);
@@ -81,6 +83,7 @@ export default function NavigationDrawer({
 
   const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'MiseChef User';
   const displayEmail = currentUser?.email || 'Sign in to enable Cloud Sync';
+  const avatarUrl = customAvatarUrl || currentUser?.photoURL || '';
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || 'M';
 
   const handleAccountSignOut = () => {
@@ -256,9 +259,9 @@ export default function NavigationDrawer({
             <div className="border-t border-surface-container-high p-3 space-y-2">
               <div className="flex items-center gap-3 rounded-2xl bg-surface-container-low px-4 py-3">
                 <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center overflow-hidden shrink-0">
-                  {currentUser?.photoURL ? (
+                  {avatarUrl ? (
                     <img
-                      src={currentUser.photoURL}
+                      src={avatarUrl}
                       alt={displayName}
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"

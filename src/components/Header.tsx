@@ -15,6 +15,7 @@ interface HeaderProps {
   rightAction?: React.ReactNode;
   activeTab?: RootTab;
   chefAvatarUrl?: string;
+  chefName?: string;
   onMenuClick?: () => void;
 }
 
@@ -25,6 +26,7 @@ export default function Header({
   rightAction,
   activeTab,
   chefAvatarUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120",
+  chefName = "User profile",
   onMenuClick
 }: HeaderProps) {
   return (
@@ -82,7 +84,7 @@ export default function Header({
             <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary-container/20 hover:ring-primary/40 transition-all cursor-pointer">
               <img
                 src={chefAvatarUrl}
-                alt="User profile"
+                alt={chefName}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />

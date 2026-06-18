@@ -30,6 +30,8 @@ interface SettingsTabProps {
   onResetApp: () => void;
   onOpenLogin: () => void;
   currentUser: User | null;
+  customAvatarUrl?: string;
+  onCustomAvatarChange?: (avatarUrl: string) => void;
   onSignOut: () => void;
 }
 
@@ -59,11 +61,22 @@ export default function SettingsTab({
   onResetApp,
   onOpenLogin,
   currentUser,
+  customAvatarUrl = '',
+  onCustomAvatarChange,
   onSignOut
 }: SettingsTabProps) {
   const [profile, setProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>('system');
   const [dataMessage, setDataMessage] = useState('');
+  const authDisplayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || '';
+  const authEmail = currentUser?.email || '';
+  const profileAvatarUrl = customAvatarUrl || profile.photo || currentUser?.photoURL || '';
+  const profileInitials = (profile.name || authDisplayName || 'CL')
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'CL';
 
   useEffect(() => {
     const cachedProfile = localStorage.getItem(CHEF_PROFILE_STORAGE_KEY);
@@ -101,7 +114,9 @@ export default function SettingsTab({
     const reader = new FileReader();
     reader.onload = event => {
       if (event.target?.result) {
-        updateProfile('photo', event.target.result as string);
+        const nextPhoto = event.target.result as string;
+        updateProfile('photo', nextPhoto);
+        onCustomAvatarChange?.(nextPhoto);
       }
     };
     reader.readAsDataURL(file);
@@ -179,6 +194,7 @@ export default function SettingsTab({
           };
           setProfile(nextProfile);
           localStorage.setItem(CHEF_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
+          onCustomAvatarChange?.(nextProfile.photo || '');
           importedData.profile = nextProfile;
         }
 
@@ -223,7 +239,14 @@ export default function SettingsTab({
       </div>
 
       <section className={sectionClass}>
-        <h3 className={sectionTitleClass}>Profile</h3>
+        <div>
+          <h3 className={sectionTitleClass}>Profile</h3>
+          {authEmail ? (
+            <p className="font-sans text-xs font-bold text-on-surface-variant mt-1">
+              {authDisplayName ? `${authDisplayName} · ` : ''}{authEmail}
+            </p>
+          ) : null}
+        </div>
         <div className="flex flex-col sm:flex-row gap-5">
           <label className="relative w-28 h-28 rounded-2xl overflow-hidden bg-primary/10 border border-surface-container-high flex items-center justify-center text-primary cursor-pointer hover:border-primary transition-colors shrink-0">
             <input
@@ -232,10 +255,10 @@ export default function SettingsTab({
               className="hidden"
               onChange={handleProfilePhotoChange}
             />
-            {profile.photo ? (
-              <img src={profile.photo} alt={profile.name} className="w-full h-full object-cover" />
+            {profileAvatarUrl ? (
+              <img src={profileAvatarUrl} alt={profile.name || authDisplayName || 'User profile'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
-              <span className="font-display text-3xl font-bold">CL</span>
+              <span className="font-display text-3xl font-bold">{profileInitials}</span>
             )}
             <span className="absolute inset-x-0 bottom-0 bg-primary/85 text-white text-[10px] font-sans font-bold py-1 flex items-center justify-center gap-1">
               <Camera className="w-3 h-3" />
@@ -350,7 +373,9 @@ export default function SettingsTab({
       <section className={sectionClass}>
         <h3 className={sectionTitleClass}>Account</h3>
         <p className="font-sans text-xs font-bold text-on-surface-variant">
-          {currentUser?.email ? `Signed in as ${currentUser.email}` : 'Cloud Sync is available after signing in.'}
+          {authEmail
+            ? `Signed in as ${authDisplayName ? `${authDisplayName} · ` : ''}${authEmail}`
+            : 'Cloud Sync is available after signing in.'}
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <button

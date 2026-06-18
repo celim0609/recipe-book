@@ -93,6 +93,18 @@ const loadLocalRecipes = () => {
   }
 };
 
+const loadCustomAvatarUrl = () => {
+  const cachedProfile = localStorage.getItem(STORAGE_PROFILE_KEY);
+  if (!cachedProfile) return '';
+
+  try {
+    const parsedProfile = JSON.parse(cachedProfile);
+    return typeof parsedProfile?.photo === 'string' ? parsedProfile.photo : '';
+  } catch (err) {
+    return '';
+  }
+};
+
 const removeUndefinedFields = <T,>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map(item => removeUndefinedFields(item)) as T;
@@ -170,6 +182,7 @@ export default function App() {
   const [isFavoritesFilterActive, setIsFavoritesFilterActive] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   
   // Notification states
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -184,6 +197,7 @@ export default function App() {
 
     const cachedRecipes = localStorage.getItem(STORAGE_RECIPES_KEY);
     const cachedCategories = localStorage.getItem(STORAGE_CATEGORIES_KEY);
+    setCustomAvatarUrl(loadCustomAvatarUrl());
     let loadedRecipes = INITIAL_RECIPES;
 
     if (cachedRecipes) {
@@ -484,6 +498,7 @@ export default function App() {
     const resetCategories = [createCategoryRecord(OTHERS_CATEGORY_NAME)];
     setRecipes([]);
     setCategories(resetCategories);
+    setCustomAvatarUrl('');
     localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify([]));
     localStorage.setItem(STORAGE_CATEGORIES_KEY, JSON.stringify(resetCategories));
     document.documentElement.dataset.appearance = 'system';
@@ -525,6 +540,8 @@ export default function App() {
             isFavoritesFilter={isFavoritesFilterActive}
             onSelectRecipe={setSelectedRecipe}
             onToggleFavorite={handleToggleFavorite}
+            currentUser={currentUser}
+            customAvatarUrl={customAvatarUrl}
           />
         );
       case 'favorites':
@@ -565,6 +582,8 @@ export default function App() {
             onResetApp={handleResetApp}
             onOpenLogin={() => setActiveTab('login')}
             currentUser={currentUser}
+            customAvatarUrl={customAvatarUrl}
+            onCustomAvatarChange={setCustomAvatarUrl}
             onSignOut={handleSignOut}
           />
         );
@@ -577,6 +596,8 @@ export default function App() {
               isFavoritesFilter={isFavoritesFilterActive}
               onSelectRecipe={setSelectedRecipe}
               onToggleFavorite={handleToggleFavorite}
+              currentUser={currentUser}
+              customAvatarUrl={customAvatarUrl}
             />
           );
         }
@@ -614,6 +635,8 @@ export default function App() {
       title: "MiseChef",
       isSubpage: false,
       activeTab: activeTab,
+      chefAvatarUrl: customAvatarUrl || currentUser?.photoURL || undefined,
+      chefName: currentUser?.displayName || currentUser?.email || 'User profile',
       onMenuClick: () => setIsNavigationDrawerOpen(true)
     };
   };
@@ -645,6 +668,7 @@ export default function App() {
             setIsFavoritesFilterActive(true);
           }}
           currentUser={currentUser}
+          customAvatarUrl={customAvatarUrl}
           onSignOut={handleSignOut}
         />
       )}

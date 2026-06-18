@@ -5,6 +5,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Heart, Play, Search } from 'lucide-react';
+import type { User } from 'firebase/auth';
 import { Recipe } from '../types';
 
 interface ChefProfile {
@@ -22,6 +23,8 @@ interface HomeTabProps {
   isFavoritesFilter?: boolean;
   onSelectRecipe: (recipe: Recipe) => void;
   onToggleFavorite: (recipeId: string) => void;
+  currentUser?: User | null;
+  customAvatarUrl?: string;
 }
 
 const CHEF_PROFILE_STORAGE_KEY = 'ce_lims_kitchen_chef_profile_v1';
@@ -40,13 +43,23 @@ export default function HomeTab({
   selectedCategory = null,
   isFavoritesFilter = false,
   onSelectRecipe,
-  onToggleFavorite
+  onToggleFavorite,
+  currentUser = null,
+  customAvatarUrl = ''
 }: HomeTabProps) {
   // All recipes in the database are user-owned now
   const chefRecipes = recipes;
   const activeFilterLabel = isFavoritesFilter ? 'Favorites' : selectedCategory;
   const [profile, setProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
   const [searchQuery, setSearchQuery] = useState('');
+  const authDisplayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || '';
+  const profileAvatarUrl = customAvatarUrl || profile.photo || currentUser?.photoURL || '';
+  const profileInitials = (profile.name || authDisplayName || 'CL')
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'CL';
 
   const searchedRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -92,15 +105,15 @@ export default function HomeTab({
         <div className="flex flex-col sm:flex-row gap-5 sm:gap-6">
           <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
             <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-primary/10 border border-surface-container-high flex items-center justify-center text-primary">
-              {profile.photo ? (
+              {profileAvatarUrl ? (
                 <img
-                  src={profile.photo}
+                  src={profileAvatarUrl}
                   alt={profile.name}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span className="font-display text-3xl font-bold">CL</span>
+                <span className="font-display text-3xl font-bold">{profileInitials}</span>
               )}
             </div>
           </div>
