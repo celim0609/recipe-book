@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Check, Clock, Heart, Pencil, Play, Scale, Users, X } from 'lucide-react';
+import { Check, Clock, Heart, Pencil, Play, Scale, Trash2, Users, X } from 'lucide-react';
 import { Recipe } from '../types';
 import { motion } from 'motion/react';
 
@@ -71,6 +71,7 @@ interface RecipeDetailModalProps {
   recipe: Recipe;
   onClose: () => void;
   onEdit: (recipe: Recipe) => void;
+  onDelete: (recipe: Recipe) => void;
   onToggleFavorite: (recipeId: string) => void;
 }
 
@@ -78,6 +79,7 @@ export default function RecipeDetailModal({
   recipe,
   onClose,
   onEdit,
+  onDelete,
   onToggleFavorite
 }: RecipeDetailModalProps) {
   const [checkedIngredients, setCheckedIngredients] = useState<string[]>([]);
@@ -168,6 +170,14 @@ export default function RecipeDetailModal({
             >
               <Pencil className="w-4 h-4" />
               Edit
+            </button>
+            <button
+              onClick={() => onDelete(recipe)}
+              className="px-4 py-2.5 rounded-full bg-white/95 text-error shadow-lg hover:scale-105 active:scale-95 transition-all outline-none flex items-center gap-2 font-sans font-bold text-xs"
+              aria-label="Delete recipe"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
             </button>
           </div>
         </div>

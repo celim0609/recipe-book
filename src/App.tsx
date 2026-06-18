@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Home } from 'lucide-react';
 import { getRedirectResult, onAuthStateChanged, signOut, type Unsubscribe, type User } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { Recipe, RecipeCategory, RootTab } from './types';
 import { INITIAL_COLLECTIONS, INITIAL_RECIPES } from './data';
 import Header from './components/Header';
@@ -164,9 +164,19 @@ const loadFirestoreRecipes = async (user: User) => {
 };
 
 const saveRecipeToFirestore = async (recipe: Recipe, user: User) => {
-  if (!db) return;
+  if (!db) {
+    return;
+  }
 
   await setDoc(doc(db, 'recipes', recipe.id), getFirestoreRecipePayload(recipe, user), { merge: true });
+};
+
+const deleteRecipeFromFirestore = async (recipeId: string) => {
+  if (!db) {
+    return;
+  }
+
+  await deleteDoc(doc(db, 'recipes', recipeId));
 };
 
 export default function App() {
@@ -474,6 +484,31 @@ export default function App() {
   const handleStartEditRecipe = (recipe: Recipe) => {
     setSelectedRecipe(null);
     setEditingRecipe(recipe);
+  };
+
+  const handleDeleteRecipe = async (recipe: Recipe) => {
+    const confirmed = window.confirm('Delete this recipe? This action cannot be undone.');
+    if (!confirmed) return;
+
+    const updatedRecipes = recipes.filter(item => item.id !== recipe.id);
+    setRecipes(updatedRecipes);
+    setSelectedRecipe(null);
+    setActiveTab('home');
+
+    if (currentUser && db && !isGuestMode) {
+      try {
+        await deleteRecipeFromFirestore(recipe.id);
+        triggerNotification(`Deleted "${recipe.title}".`, 'info');
+      } catch (err) {
+        setRecipes(recipes);
+        setSelectedRecipe(recipe);
+        triggerNotification(`Could not delete "${recipe.title}" from cloud. Please try again.`, 'error');
+      }
+      return;
+    }
+
+    localStorage.setItem(STORAGE_RECIPES_KEY, JSON.stringify(updatedRecipes));
+    triggerNotification(`Deleted "${recipe.title}".`, 'info');
   };
 
   const handleCancelRecipeForm = () => {
@@ -905,6 +940,7 @@ export default function App() {
             recipe={selectedRecipe}
             onClose={() => setSelectedRecipe(null)}
             onEdit={handleStartEditRecipe}
+            onDelete={handleDeleteRecipe}
             onToggleFavorite={handleToggleFavorite}
           />
         )}
