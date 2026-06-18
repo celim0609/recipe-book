@@ -22,6 +22,9 @@ type ParsedImportedRecipe = {
   id: string;
   title: string;
   yield: string;
+  servings: number | null;
+  prepTime: number | null;
+  cookTime: number | null;
   ingredients: Ingredient[];
   method: MethodStep[];
   sourceText: string;
@@ -58,6 +61,25 @@ const isSectionHeading = (line: string, keywords: string[]) => {
   return keywords.some(keyword => normalized === keyword);
 };
 
+const parseTimeToMinutes = (value: string) => {
+  const normalized = value.toLowerCase().replace(/mins?\b/g, 'minutes').replace(/hrs?\b/g, 'hours');
+  const hourMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:hours?|h)\b/);
+  const minuteMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|m)\b/);
+  const bareNumberMatch = normalized.match(/^(\d+(?:\.\d+)?)$/);
+  const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+  const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+  const bareMinutes = !hourMatch && !minuteMatch && bareNumberMatch ? Number(bareNumberMatch[1]) : 0;
+  const total = hours + minutes + bareMinutes;
+  return Number.isFinite(total) && total > 0 ? Math.round(total) : null;
+};
+
+const parseServingsValue = (value: string) => {
+  const match = value.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+};
+
 const parsePastedRecipe = (rawText: string) => {
   const lines = rawText
     .split(/\r?\n/)
@@ -66,6 +88,9 @@ const parsePastedRecipe = (rawText: string) => {
 
   let parsedTitle = '';
   let parsedYield = '';
+  let parsedServings: number | null = null;
+  let parsedPrepTime: number | null = null;
+  let parsedCookTime: number | null = null;
   const ingredientLines: string[] = [];
   const methodLines: string[] = [];
   let activeSection: 'ingredients' | 'method' | null = null;
@@ -73,6 +98,9 @@ const parsePastedRecipe = (rawText: string) => {
   lines.forEach((line, index) => {
     const titleMatch = line.match(/^(recipe\s*)?title\s*[:：]\s*(.+)$/i);
     const yieldMatch = line.match(/^(yield|makes|serves|servings)\s*[:：]\s*(.+)$/i);
+    const servingsMatch = line.match(/^(serves|servings)\s*[:：]?\s*(.+)$/i);
+    const prepTimeMatch = line.match(/^(prep(?:aration)?\s*time|prep)\s*[:：]?\s*(.+)$/i);
+    const cookTimeMatch = line.match(/^(cook(?:ing)?\s*time|cook|bake\s*time|baking\s*time)\s*[:：]?\s*(.+)$/i);
     const ingredientsMatch = line.match(/^(ingredients?|ingredient list)\s*[:：]?\s*(.*)$/i);
     const methodMatch = line.match(/^(method|steps|instructions|directions|procedure|preparation)\s*[:：]?\s*(.*)$/i);
 
@@ -83,6 +111,25 @@ const parsePastedRecipe = (rawText: string) => {
 
     if (yieldMatch) {
       parsedYield = yieldMatch[2].trim();
+      parsedServings = parsedServings ?? parseServingsValue(parsedYield);
+      return;
+    }
+
+    if (servingsMatch) {
+      parsedServings = parseServingsValue(servingsMatch[2].trim());
+      if (!parsedYield) {
+        parsedYield = servingsMatch[2].trim();
+      }
+      return;
+    }
+
+    if (prepTimeMatch) {
+      parsedPrepTime = parseTimeToMinutes(prepTimeMatch[2].trim());
+      return;
+    }
+
+    if (cookTimeMatch) {
+      parsedCookTime = parseTimeToMinutes(cookTimeMatch[2].trim());
       return;
     }
 
@@ -133,6 +180,9 @@ const parsePastedRecipe = (rawText: string) => {
   return {
     title: parsedTitle,
     yield: parsedYield,
+    servings: parsedServings,
+    prepTime: parsedPrepTime,
+    cookTime: parsedCookTime,
     ingredients: parseIngredientLines(ingredientLines),
     method: methodLines
       .map(cleanImportedLine)
@@ -152,7 +202,7 @@ const isLikelyRecipeTitleLine = (line: string) => {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length > 90) return false;
   if (/[:：]$/.test(trimmed)) return false;
-  if (/^(ingredients?|method|steps|instructions|directions|procedure|preparation|yield|makes|serves|servings)\b/i.test(trimmed)) return false;
+  if (/^(ingredients?|method|steps|instructions|directions|procedure|preparation|yield|makes|serves|servings|prep(?:aration)?\s*time|cook(?:ing)?\s*time|bake\s*time|baking\s*time)\b/i.test(trimmed)) return false;
   return /[a-zA-Z]/.test(trimmed);
 };
 
@@ -167,6 +217,9 @@ const toParsedImportedRecipe = (rawText: string, index: number): ParsedImportedR
     id: `pdf_recipe_${Date.now()}_${index}`,
     title: parsedRecipe.title,
     yield: parsedRecipe.yield,
+    servings: parsedRecipe.servings,
+    prepTime: parsedRecipe.prepTime,
+    cookTime: parsedRecipe.cookTime,
     ingredients: parsedRecipe.ingredients,
     method: parsedRecipe.method,
     sourceText: rawText.trim()
@@ -239,6 +292,45 @@ const extractTextFromPdfFile = async (file: File) => {
   }
 
   return pageTexts.join('\n\n');
+};
+
+const readFileAsBase64 = (file: File) => {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(new Error('Unable to read image file.'));
+    reader.readAsDataURL(file);
+  });
+};
+
+const extractRecipeTextFromImageFile = async (file: File) => {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('Image text extraction needs a Gemini API key. Use Copy & Paste or a text-based PDF for now.');
+  }
+
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey });
+  const imageBase64 = await readFileAsBase64(file);
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: [
+      {
+        inlineData: {
+          mimeType: file.type || 'image/jpeg',
+          data: imageBase64
+        }
+      },
+      {
+        text: 'Transcribe only the visible recipe text from this image. Preserve line breaks. Do not invent missing details.'
+      }
+    ]
+  });
+
+  return response.text || '';
 };
 
 const getDataUrlBytes = (dataUrl: string) => {
@@ -342,6 +434,7 @@ export default function AddRecipeTab({
   const [category, setCategory] = useState(initialRecipe?.category || categories[0]?.name || FALLBACK_CATEGORY_NAME);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [prepTime, setPrepTime] = useState<number>(initialRecipe?.prepTime || 30);
+  const [cookTime, setCookTime] = useState<number>(initialRecipe?.cookTime || 0);
   const [servings, setServings] = useState<number>(initialRecipe?.servings || 2);
   const [recipeYield, setRecipeYield] = useState(initialRecipe?.yield || (initialRecipe ? `${initialRecipe.servings} servings` : ''));
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>(initialRecipe?.difficulty || 'Easy');
@@ -366,7 +459,7 @@ export default function AddRecipeTab({
   const [isGeneratingSteps, setIsGeneratingSteps] = useState(false);
   const [aiStepError, setAiStepError] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importMode, setImportMode] = useState<'text' | 'pdf'>('text');
+  const [importMode, setImportMode] = useState<'text' | 'pdf' | 'image' | 'camera'>('text');
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState('');
   const [isReadingPdf, setIsReadingPdf] = useState(false);
@@ -585,6 +678,9 @@ Rules:
 
     setTitle(parsedRecipe.title);
     setRecipeYield(parsedRecipe.yield || recipeYield);
+    if (parsedRecipe.servings) setServings(parsedRecipe.servings);
+    if (parsedRecipe.prepTime) setPrepTime(parsedRecipe.prepTime);
+    if (parsedRecipe.cookTime) setCookTime(parsedRecipe.cookTime);
     setIngredients(parsedRecipe.ingredients);
     setMethodSteps(parsedRecipe.method);
 
@@ -592,9 +688,29 @@ Rules:
     setImportText('');
   };
 
-  const applyImportedRecipeToForm = (recipe: Pick<ParsedImportedRecipe, 'title' | 'yield' | 'ingredients' | 'method'>) => {
+  const handleImportedText = (rawText: string, emptyMessage = 'No recipe text was found.') => {
+    const detectedRecipes = detectRecipesFromText(rawText);
+
+    if (detectedRecipes.length === 0) {
+      setDetectedPdfRecipes([]);
+      setSelectedPdfRecipeIds([]);
+      setImportError(emptyMessage);
+      return;
+    }
+
+    setDetectedPdfRecipes(detectedRecipes);
+    setSelectedPdfRecipeIds(detectedRecipes.length === 1 ? [detectedRecipes[0].id] : []);
+    setImportError('');
+  };
+
+  const applyImportedRecipeToForm = (
+    recipe: Pick<ParsedImportedRecipe, 'title' | 'yield' | 'servings' | 'prepTime' | 'cookTime' | 'ingredients' | 'method'>
+  ) => {
     setTitle(recipe.title);
     setRecipeYield(recipe.yield || recipeYield);
+    if (recipe.servings) setServings(recipe.servings);
+    if (recipe.prepTime) setPrepTime(recipe.prepTime);
+    if (recipe.cookTime) setCookTime(recipe.cookTime);
     setIngredients(recipe.ingredients);
     setMethodSteps(recipe.method);
   };
@@ -615,17 +731,38 @@ Rules:
     try {
       setIsReadingPdf(true);
       const extractedText = await extractTextFromPdfFile(file);
-      const detectedRecipes = detectRecipesFromText(extractedText);
-
-      if (detectedRecipes.length === 0) {
-        setImportError('No complete recipes were detected. The PDF needs selectable text with title, ingredients, and method sections.');
-        return;
-      }
-
-      setDetectedPdfRecipes(detectedRecipes);
-      setSelectedPdfRecipeIds(detectedRecipes.length === 1 ? [detectedRecipes[0].id] : []);
+      handleImportedText(
+        extractedText,
+        'No complete recipes were detected. The PDF needs selectable text with title, ingredients, and method sections.'
+      );
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Unable to read this PDF.');
+    } finally {
+      setIsReadingPdf(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImageImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportError('');
+    setDetectedPdfRecipes([]);
+    setSelectedPdfRecipeIds([]);
+
+    if (!file.type.startsWith('image/')) {
+      setImportError('Please choose an image file.');
+      return;
+    }
+
+    try {
+      setIsReadingPdf(true);
+      const extractedText = await extractRecipeTextFromImageFile(file);
+      setImportText(extractedText);
+      handleImportedText(extractedText, 'No recipe text could be extracted from this image.');
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Unable to extract recipe text from this image.');
     } finally {
       setIsReadingPdf(false);
       e.target.value = '';
@@ -695,6 +832,7 @@ Rules:
       imageUrl: initialRecipe?.imageUrl,
       category: selectedCategory || FALLBACK_CATEGORY_NAME,
       prepTime: Number(prepTime) || 30,
+      cookTime: Number(cookTime) || undefined,
       servings: savedServings,
       yield: recipeYield.trim() || `${savedServings} servings`,
       difficulty,
@@ -822,6 +960,23 @@ Rules:
                 value={prepTime}
                 onChange={e => setPrepTime(Number(e.target.value))}
                 placeholder="30"
+                className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface pl-4 pr-12 py-3.5 focus:ring-1 focus:ring-primary font-bold"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-sans font-bold text-outline">
+                MIN
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="font-sans font-bold text-xs text-on-surface-variant/90 px-1">Cook Time</label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                value={cookTime}
+                onChange={e => setCookTime(Number(e.target.value))}
+                placeholder="0"
                 className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface pl-4 pr-12 py-3.5 focus:ring-1 focus:ring-primary font-bold"
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-sans font-bold text-outline">
@@ -1113,7 +1268,7 @@ Rules:
               <div>
                 <h3 className="font-display text-xl font-bold text-primary">Import Recipe</h3>
                 <p className="font-sans text-xs text-on-surface-variant font-bold">
-                  Paste a recipe or import from a text-based PDF. This fills title, yield, ingredients, and method only.
+                  Add a recipe from text, PDF, image, or camera. MiseChef will fill the editor for review before saving.
                 </p>
               </div>
               <button
@@ -1126,38 +1281,74 @@ Rules:
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 bg-surface-container-low p-1 rounded-full">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setImportMode('text');
                   setImportError('');
+                  setDetectedPdfRecipes([]);
+                  setSelectedPdfRecipeIds([]);
                 }}
-                className={`rounded-full px-4 py-2.5 text-xs font-sans font-bold transition-all ${
+                className={`rounded-2xl px-4 py-3 text-xs font-sans font-bold transition-all border ${
                   importMode === 'text'
-                    ? 'bg-primary text-on-primary shadow-sm'
-                    : 'text-primary hover:bg-white'
+                    ? 'bg-primary text-on-primary border-primary shadow-sm'
+                    : 'bg-surface-container-low text-primary border-surface-container-high hover:border-primary'
                 }`}
               >
-                Paste Text
+                Copy & Paste
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setImportMode('pdf');
                   setImportError('');
+                  setDetectedPdfRecipes([]);
+                  setSelectedPdfRecipeIds([]);
                 }}
-                className={`rounded-full px-4 py-2.5 text-xs font-sans font-bold transition-all ${
+                className={`rounded-2xl px-4 py-3 text-xs font-sans font-bold transition-all border ${
                   importMode === 'pdf'
-                    ? 'bg-primary text-on-primary shadow-sm'
-                    : 'text-primary hover:bg-white'
+                    ? 'bg-primary text-on-primary border-primary shadow-sm'
+                    : 'bg-surface-container-low text-primary border-surface-container-high hover:border-primary'
                 }`}
               >
-                Import from PDF
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportMode('image');
+                  setImportError('');
+                  setDetectedPdfRecipes([]);
+                  setSelectedPdfRecipeIds([]);
+                }}
+                className={`rounded-2xl px-4 py-3 text-xs font-sans font-bold transition-all border ${
+                  importMode === 'image'
+                    ? 'bg-primary text-on-primary border-primary shadow-sm'
+                    : 'bg-surface-container-low text-primary border-surface-container-high hover:border-primary'
+                }`}
+              >
+                Image
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportMode('camera');
+                  setDetectedPdfRecipes([]);
+                  setSelectedPdfRecipeIds([]);
+                  setImportError('Camera import is planned for a future update.');
+                }}
+                className={`rounded-2xl px-4 py-3 text-xs font-sans font-bold transition-all border ${
+                  importMode === 'camera'
+                    ? 'bg-primary text-on-primary border-primary shadow-sm'
+                    : 'bg-surface-container-low text-primary border-surface-container-high hover:border-primary'
+                }`}
+              >
+                Camera
               </button>
             </div>
 
-            {importMode === 'text' ? (
+            {importMode === 'text' && (
               <textarea
                 value={importText}
                 onChange={e => setImportText(e.target.value)}
@@ -1165,7 +1356,9 @@ Rules:
                 rows={14}
                 className="w-full bg-white border border-surface-container-high rounded-xl p-4 text-sm font-sans text-on-surface resize-none focus:ring-1 focus:ring-primary"
               />
-            ) : (
+            )}
+
+            {importMode === 'pdf' && (
               <div className="space-y-4">
                 <label className="block bg-white border-2 border-dashed border-outline-variant rounded-2xl p-5 text-center cursor-pointer hover:border-primary transition-colors">
                   <input
@@ -1179,97 +1372,124 @@ Rules:
                     {isReadingPdf ? 'Reading PDF...' : 'Choose PDF'}
                   </span>
                   <span className="block font-sans font-bold text-[11px] text-on-surface-variant mt-1">
-                    Local text extraction only. Scanned image PDFs need OCR and are not supported.
+                    Text-based PDFs work best. If text is detected, the editor will fill automatically.
                   </span>
                 </label>
+              </div>
+            )}
 
-                {detectedPdfRecipes.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="font-display text-lg font-bold text-primary">
-                        Detected Recipes ({detectedPdfRecipes.length})
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedPdfRecipeIds(
-                            selectedPdfRecipeIds.length === detectedPdfRecipes.length
-                              ? []
-                              : detectedPdfRecipes.map(recipe => recipe.id)
-                          )
-                        }
-                        className="text-xs font-sans font-bold text-secondary"
+            {importMode === 'image' && (
+              <div className="space-y-4">
+                <label className="block bg-white border-2 border-dashed border-outline-variant rounded-2xl p-5 text-center cursor-pointer hover:border-primary transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageImportFileChange}
+                    className="hidden"
+                  />
+                  <ImageIcon className="w-8 h-8 mx-auto text-outline mb-2" />
+                  <span className="block font-sans font-bold text-sm text-primary">
+                    {isReadingPdf ? 'Reading image...' : 'Choose Image'}
+                  </span>
+                  <span className="block font-sans font-bold text-[11px] text-on-surface-variant mt-1">
+                    Clear photos or screenshots with readable recipe text work best.
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {importMode === 'camera' && (
+              <div className="bg-surface-container-low border border-surface-container-high rounded-2xl p-5 text-center">
+                <Camera className="w-8 h-8 mx-auto text-outline mb-2" />
+                <p className="font-sans text-sm font-bold text-primary">Camera import is coming soon.</p>
+              </div>
+            )}
+
+            {detectedPdfRecipes.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-display text-lg font-bold text-primary">
+                    Detected Recipes ({detectedPdfRecipes.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedPdfRecipeIds(
+                        selectedPdfRecipeIds.length === detectedPdfRecipes.length
+                          ? []
+                          : detectedPdfRecipes.map(recipe => recipe.id)
+                      )
+                    }
+                    className="text-xs font-sans font-bold text-secondary"
+                  >
+                    {selectedPdfRecipeIds.length === detectedPdfRecipes.length ? 'Clear All' : 'Select All'}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {detectedPdfRecipes.map(recipe => {
+                    const isSelected = selectedPdfRecipeIds.includes(recipe.id);
+                    return (
+                      <label
+                        key={recipe.id}
+                        className={`block rounded-2xl border p-4 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-primary/10 border-primary'
+                            : 'bg-white border-surface-container-high hover:border-primary/50'
+                        }`}
                       >
-                        {selectedPdfRecipeIds.length === detectedPdfRecipes.length ? 'Clear All' : 'Select All'}
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      {detectedPdfRecipes.map(recipe => {
-                        const isSelected = selectedPdfRecipeIds.includes(recipe.id);
-                        return (
-                          <label
-                            key={recipe.id}
-                            className={`block rounded-2xl border p-4 cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-primary/10 border-primary'
-                                : 'bg-white border-surface-container-high hover:border-primary/50'
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => togglePdfRecipeSelection(recipe.id)}
-                                className="mt-1 accent-primary"
-                              />
-                              <div className="min-w-0 flex-1 space-y-2">
-                                <div>
-                                  <h5 className="font-display text-base font-bold text-primary truncate">
-                                    {recipe.title}
-                                  </h5>
-                                  <p className="font-sans text-[11px] font-bold text-on-surface-variant">
-                                    {recipe.yield || 'Yield not found'} • {recipe.ingredients.length} ingredients • {recipe.method.length} steps
-                                  </p>
-                                </div>
-
-                                {isSelected && (
-                                  <div className="grid md:grid-cols-2 gap-3 text-left">
-                                    <div className="bg-surface-container-low rounded-xl p-3">
-                                      <p className="font-sans text-[10px] font-extrabold text-secondary uppercase mb-2">
-                                        Ingredients Preview
-                                      </p>
-                                      <ul className="space-y-1">
-                                        {recipe.ingredients.slice(0, 5).map(ingredient => (
-                                          <li key={ingredient.id} className="font-sans text-xs font-semibold text-on-surface">
-                                            {[ingredient.qty, ingredient.unit, ingredient.name].filter(Boolean).join(' ')}
-                                            {ingredient.notes ? ` (${ingredient.notes})` : ''}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="bg-surface-container-low rounded-xl p-3">
-                                      <p className="font-sans text-[10px] font-extrabold text-secondary uppercase mb-2">
-                                        Method Preview
-                                      </p>
-                                      <ol className="space-y-1">
-                                        {recipe.method.slice(0, 4).map(step => (
-                                          <li key={step.id} className="font-sans text-xs font-semibold text-on-surface">
-                                            {step.stepNumber}. {step.description}
-                                          </li>
-                                        ))}
-                                      </ol>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => togglePdfRecipeSelection(recipe.id)}
+                            className="mt-1 accent-primary"
+                          />
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div>
+                              <h5 className="font-display text-base font-bold text-primary truncate">
+                                {recipe.title}
+                              </h5>
+                              <p className="font-sans text-[11px] font-bold text-on-surface-variant">
+                                {recipe.yield || 'Yield not found'} • {recipe.servings || 'Servings not found'} servings • {recipe.ingredients.length} ingredients • {recipe.method.length} steps
+                              </p>
                             </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+
+                            {isSelected && (
+                              <div className="grid md:grid-cols-2 gap-3 text-left">
+                                <div className="bg-surface-container-low rounded-xl p-3">
+                                  <p className="font-sans text-[10px] font-extrabold text-secondary uppercase mb-2">
+                                    Ingredients Preview
+                                  </p>
+                                  <ul className="space-y-1">
+                                    {recipe.ingredients.slice(0, 5).map(ingredient => (
+                                      <li key={ingredient.id} className="font-sans text-xs font-semibold text-on-surface">
+                                        {[ingredient.qty, ingredient.unit, ingredient.name].filter(Boolean).join(' ')}
+                                        {ingredient.notes ? ` (${ingredient.notes})` : ''}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="bg-surface-container-low rounded-xl p-3">
+                                  <p className="font-sans text-[10px] font-extrabold text-secondary uppercase mb-2">
+                                    Method Preview
+                                  </p>
+                                  <ol className="space-y-1">
+                                    {recipe.method.slice(0, 4).map(step => (
+                                      <li key={step.id} className="font-sans text-xs font-semibold text-on-surface">
+                                        {step.stepNumber}. {step.description}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1289,11 +1509,15 @@ Rules:
               </button>
               <button
                 type="button"
-                onClick={importMode === 'text' ? handleImportRecipe : handleImportSelectedPdfRecipes}
-                disabled={importMode === 'pdf' && (isReadingPdf || detectedPdfRecipes.length === 0)}
+                onClick={detectedPdfRecipes.length > 0 ? handleImportSelectedPdfRecipes : handleImportRecipe}
+                disabled={
+                  isReadingPdf ||
+                  importMode === 'camera' ||
+                  (detectedPdfRecipes.length === 0 && (importMode !== 'text' || !importText.trim()))
+                }
                 className="bg-primary disabled:bg-outline-variant text-on-primary rounded-full px-5 py-3 text-xs font-sans font-bold"
               >
-                {importMode === 'pdf' ? 'Import Selected' : 'Fill Form'}
+                Import Recipe
               </button>
             </div>
           </div>

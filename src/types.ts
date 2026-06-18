@@ -25,6 +25,7 @@ export interface Recipe {
   imageUrl?: string;
   category: string;
   prepTime: number; // in minutes
+  cookTime?: number;
   servings: number;
   yield: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
