@@ -101,7 +101,7 @@ export const scanRecipeImageWithGemini = async ({
   const ai = new GoogleGenAI({ apiKey });
   const imageBase64 = imageDataUrl?.split(',')[1] || await readFileAsBase64(file);
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     contents: [
       {
         inlineData: {
