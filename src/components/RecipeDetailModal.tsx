@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Clock, Copy, Heart, MoreVertical, Pencil, Play, Scale, Share2, Trash2, Users, X } from 'lucide-react';
 import { Recipe } from '../types';
 import { motion } from 'motion/react';
@@ -106,6 +106,24 @@ export default function RecipeDetailModal({
     ? targetParsedYield.amount / originalParsedYield.amount
     : 1;
   const isScaledView = recipeView === 'scaled' && canScale;
+  const scaledRecipe = useMemo<Recipe>(() => {
+    if (!canScale || !targetParsedYield) return recipe;
+
+    return {
+      ...recipe,
+      yield: targetYield.trim(),
+      servings: targetParsedYield.unit === 'servings'
+        ? Math.round(targetParsedYield.amount)
+        : recipe.servings,
+      ingredients: recipe.ingredients.map(ingredient => ({
+        ...ingredient,
+        qty: scaleQuantity(ingredient.qty, scaleRatio)
+      })),
+      method: recipe.method
+    };
+  }, [canScale, recipe, scaleRatio, targetParsedYield, targetYield]);
+  const displayedRecipe = isScaledView ? scaledRecipe : recipe;
+  const displayedYield = displayedRecipe.yield || `${displayedRecipe.servings} servings`;
 
   useEffect(() => {
     if (!targetYield) {
@@ -254,15 +272,15 @@ export default function RecipeDetailModal({
               <div className="flex flex-wrap items-center gap-3 border-t border-b border-surface-container/50 py-3 text-xs sm:text-sm text-on-surface-variant font-semibold">
                 <div className="flex items-center gap-1">
                   <Clock className="w-4 h-4 text-secondary" />
-                  <span>{recipe.prepTime} mins prep</span>
+                  <span>{displayedRecipe.prepTime} mins prep</span>
                 </div>
                 <span className="text-outline-variant">•</span>
                 <div className="flex items-center gap-1">
                   <Users className="w-4 h-4 text-primary" />
-                  <span>{recipe.servings} Servings</span>
+                  <span>{displayedRecipe.servings} Servings</span>
                 </div>
                 <span className="text-outline-variant">•</span>
-                <span>Yield: {originalYield}</span>
+                <span>Yield: {displayedYield}</span>
                 <span className="text-outline-variant">•</span>
                 <span>{recipe.difficulty}</span>
               </div>
@@ -354,12 +372,12 @@ export default function RecipeDetailModal({
                   )}
                 </div>
                 <span className="text-xs text-outline font-sans font-bold">
-                  {checkedIngredients.length}/{recipe.ingredients.length} checked
+                  {checkedIngredients.length}/{displayedRecipe.ingredients.length} checked
                 </span>
               </div>
 
               <ul className="divide-y divide-surface-container-high/50">
-                {recipe.ingredients.map(ing => (
+                {displayedRecipe.ingredients.map(ing => (
                   <li
                     key={ing.id}
                     onClick={() => toggleIngredientCheck(ing.id)}
@@ -383,7 +401,7 @@ export default function RecipeDetailModal({
                       </span>
                     </div>
                     <span className="text-sm font-bold text-secondary font-sans block bg-secondary/5 px-2.5 py-0.5 rounded-md">
-                      {isScaledView ? scaleQuantity(ing.qty, scaleRatio) : ing.qty} {ing.unit}
+                      {ing.qty} {ing.unit}
                     </span>
                   </li>
                 ))}
@@ -396,7 +414,7 @@ export default function RecipeDetailModal({
               </h3>
 
               <div className="space-y-4">
-                {recipe.method.map((step, idx) => {
+                {displayedRecipe.method.map((step, idx) => {
                   const isDone = completedSteps.includes(step.id);
                   return (
                     <div
