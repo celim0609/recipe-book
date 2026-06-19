@@ -531,6 +531,11 @@ export default function AddRecipeTab({
   mode = 'add'
 }: AddRecipeTabProps) {
   const isEditing = mode === 'edit' && initialRecipe;
+  console.log('Recipe Editor render', {
+    mode,
+    isEditing: Boolean(isEditing),
+    initialRecipeTitle: initialRecipe?.title || null
+  });
 
   // Base details state
   const [title, setTitle] = useState(initialRecipe?.title || '');
@@ -828,6 +833,11 @@ Rules:
     if (recipe.scannedImageDataUrl) setScannedImageDataUrl(recipe.scannedImageDataUrl);
     setIngredients(recipe.ingredients);
     setMethodSteps(recipe.method);
+    console.log('Recipe Editor state setters called', {
+      title: recipe.title,
+      ingredientsCount: recipe.ingredients.length,
+      methodCount: recipe.method.length
+    });
     console.log('Recipe Editor populated', {
       title: recipe.title,
       ingredientsCount: recipe.ingredients.length,
@@ -836,6 +846,13 @@ Rules:
       yield: recipe.yield,
       prepTime: recipe.prepTime
     });
+    window.setTimeout(() => {
+      console.log('Recipe Editor post-state-check', {
+        titleInputValue: (document.querySelector('input[placeholder="e.g., Grandma’s Apple Pie"]') as HTMLInputElement | null)?.value || null,
+        ingredientInputs: Array.from(document.querySelectorAll('#ingredients-section input')).map(input => (input as HTMLInputElement).value),
+        methodTextareas: Array.from(document.querySelectorAll('textarea[placeholder="Describe this step in detail..."]')).map(input => (input as HTMLTextAreaElement).value)
+      });
+    }, 0);
   };
 
   const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -990,7 +1007,12 @@ Rules:
       isReadingPdf,
       detectedRecipesCount: detectedPdfRecipes.length,
       selectedPdfRecipeIds,
-      importTextLength: importText.trim().length
+      importTextLength: importText.trim().length,
+      disabledExpression: {
+        isReadingPdf,
+        cameraModeBlocked: importMode === 'camera',
+        noDetectedRecipesAndNotImportableText: detectedPdfRecipes.length === 0 && (importMode !== 'text' || !importText.trim())
+      }
     });
 
     if (detectedPdfRecipes.length > 0) {

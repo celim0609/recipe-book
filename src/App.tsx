@@ -492,6 +492,7 @@ export default function App() {
 
   // Add Recipe
   const handleSaveNewRecipe = async (newRecipe: Recipe) => {
+    console.log('App.tsx handleSaveNewRecipe received recipe', newRecipe);
     setAddingRecipe(false);
     setActiveTab('home');
 
@@ -519,6 +520,7 @@ export default function App() {
   };
 
   const handleSaveEditedRecipe = async (updatedRecipe: Recipe) => {
+    console.log('App.tsx handleSaveEditedRecipe received recipe', updatedRecipe);
     setEditingRecipe(null);
     setActiveTab('home');
 
@@ -1013,21 +1015,38 @@ export default function App() {
       {/* Main Scaffold Layout Wrapper */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 pt-24 pb-28 md:pb-16">
         {editingRecipe ? (
+          <>
+          {console.log('App.tsx renders Recipe Editor', {
+            mode: 'edit',
+            recipeTitle: editingRecipe.title
+          })}
           <AddRecipeTab
             initialRecipe={editingRecipe}
             mode="edit"
             categories={categories}
             onCreateCategory={handleCreateCategory}
-            onSave={handleSaveEditedRecipe}
+            onSave={(recipe) => {
+              console.log('App.tsx onSave wrapper called from Recipe Editor', recipe);
+              handleSaveEditedRecipe(recipe);
+            }}
             onCancel={handleCancelRecipeForm}
           />
+          </>
         ) : addingRecipe ? (
+          <>
+          {console.log('App.tsx renders Recipe Editor', {
+            mode: 'add'
+          })}
           <AddRecipeTab
             categories={categories}
             onCreateCategory={handleCreateCategory}
-            onSave={handleSaveNewRecipe}
+            onSave={(recipe) => {
+              console.log('App.tsx onSave wrapper called from Recipe Editor', recipe);
+              handleSaveNewRecipe(recipe);
+            }}
             onCancel={handleCancelRecipeForm}
           />
+          </>
         ) : (
           renderTabContent()
         )}
