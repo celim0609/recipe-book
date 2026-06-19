@@ -16,6 +16,7 @@ interface HeaderProps {
   activeTab?: RootTab;
   chefAvatarUrl?: string;
   chefName?: string;
+  showAvatar?: boolean;
   onMenuClick?: () => void;
   onAvatarClick?: () => void;
 }
@@ -26,11 +27,20 @@ export default function Header({
   onBack,
   rightAction,
   activeTab,
-  chefAvatarUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120",
+  chefAvatarUrl = "",
   chefName = "User profile",
+  showAvatar = false,
   onMenuClick,
   onAvatarClick
 }: HeaderProps) {
+  const avatarInitials = chefName
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'MC';
+
   return (
     <header className="fixed top-0 left-0 w-full z-50 h-16 bg-surface/85 backdrop-blur-md border-b border-surface-container-high transition-all">
       <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 md:px-8 flex justify-between items-center">
@@ -82,21 +92,27 @@ export default function Header({
         <div className="flex items-center gap-3">
           {rightAction ? (
             rightAction
-          ) : (
+          ) : showAvatar ? (
             <button
               type="button"
               onClick={onAvatarClick}
-              className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary-container/20 hover:ring-primary/40 transition-all cursor-pointer"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden border-2 border-primary shadow-sm shadow-primary/20 hover:shadow-md hover:shadow-primary/25 hover:scale-105 transition-all cursor-pointer bg-primary text-on-primary flex items-center justify-center"
               aria-label="Open account settings"
             >
-              <img
-                src={chefAvatarUrl}
-                alt={chefName}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+              {chefAvatarUrl ? (
+                <img
+                  src={chefAvatarUrl}
+                  alt={chefName}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="font-display text-sm sm:text-base font-bold leading-none">
+                  {avatarInitials}
+                </span>
+              )}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </header>

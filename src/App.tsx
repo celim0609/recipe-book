@@ -950,6 +950,7 @@ export default function App() {
       activeTab: activeTab,
       chefAvatarUrl: customAvatarUrl || currentUser?.photoURL || undefined,
       chefName: currentUser?.displayName || currentUser?.email || 'User profile',
+      showAvatar: Boolean(currentUser),
       onAvatarClick: handleAvatarClick,
       onMenuClick: () => setIsNavigationDrawerOpen(true)
     };
