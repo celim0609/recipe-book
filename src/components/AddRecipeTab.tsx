@@ -319,7 +319,7 @@ const extractStructuredRecipeFromScan = async (file: File, scannedImageDataUrl: 
     title,
     description: scannedRecipe.description.trim(),
     yield: scannedRecipe.yield.trim(),
-    servings: normalizeAiNumber(scannedRecipe.yield, parseServingsValue),
+    servings: normalizeAiNumber(scannedRecipe.servings, parseServingsValue) ?? normalizeAiNumber(scannedRecipe.yield, parseServingsValue),
     prepTime: normalizeAiNumber(scannedRecipe.prepTime),
     cookTime: normalizeAiNumber(scannedRecipe.cookTime),
     chefNotes: scannedRecipe.notes.trim(),
@@ -337,6 +337,7 @@ const extractStructuredRecipeFromScan = async (file: File, scannedImageDataUrl: 
     sourceText: [
       title,
       scannedRecipe.yield ? `Yield: ${scannedRecipe.yield}` : '',
+      scannedRecipe.servings ? `Servings: ${scannedRecipe.servings}` : '',
       scannedRecipe.prepTime ? `Prep Time: ${scannedRecipe.prepTime}` : '',
       scannedRecipe.cookTime ? `Cook Time: ${scannedRecipe.cookTime}` : '',
       '',
@@ -782,9 +783,9 @@ Rules:
       setIsReadingPdf(true);
       const optimizedScanImage = await optimizeCoverImageFile(file);
       const scannedRecipe = await extractStructuredRecipeFromScan(file, optimizedScanImage);
-      setDetectedPdfRecipes([scannedRecipe]);
-      setSelectedPdfRecipeIds([scannedRecipe.id]);
+      applyImportedRecipeToForm(scannedRecipe);
       setImportText(scannedRecipe.sourceText);
+      setShowImportModal(false);
       setImportError('');
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Unable to scan this recipe image.');

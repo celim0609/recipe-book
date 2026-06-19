@@ -13,6 +13,7 @@ export type GeminiScannedRecipe = {
   title: string;
   description: string;
   yield: string;
+  servings: string;
   prepTime: string;
   cookTime: string;
   ingredients: GeminiScannedIngredient[];
@@ -65,6 +66,7 @@ const parseGeminiRecipeJson = (text: string): GeminiScannedRecipe => {
     title: readString(source.title),
     description: readString(source.description),
     yield: readString(source.yield),
+    servings: readString(source.servings),
     prepTime: readString(source.prepTime),
     cookTime: readString(source.cookTime),
     ingredients: rawIngredients
@@ -113,7 +115,7 @@ export const scanRecipeImageWithGemini = async ({
         text: [
           'Extract one recipe from this image.',
           'Return ONLY valid JSON with this exact shape:',
-          '{"title":"","description":"","yield":"","prepTime":"","cookTime":"","ingredients":[{"name":"","quantity":"","unit":""}],"method":[],"notes":""}',
+          '{"title":"","description":"","yield":"","servings":"","prepTime":"","cookTime":"","ingredients":[{"name":"","quantity":"","unit":""}],"method":[],"notes":""}',
           'Use only text visibly present in the image.',
           'If a field cannot be recognized, leave it blank.',
           'Do not guess, infer, add nutrition, add cost, or invent missing recipe details.'
@@ -128,6 +130,7 @@ export const scanRecipeImageWithGemini = async ({
           title: { type: Type.STRING },
           description: { type: Type.STRING },
           yield: { type: Type.STRING },
+          servings: { type: Type.STRING },
           prepTime: { type: Type.STRING },
           cookTime: { type: Type.STRING },
           ingredients: {
