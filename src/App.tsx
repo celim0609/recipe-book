@@ -891,6 +891,7 @@ export default function App() {
             customAvatarUrl={customAvatarUrl}
             onCustomAvatarChange={setCustomAvatarUrl}
             onSignOut={handleSignOut}
+            onNotify={triggerNotification}
           />
         );
       case 'login':

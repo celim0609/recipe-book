@@ -6,6 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import { Camera, Download, RotateCcw, Upload } from 'lucide-react';
 import type { User } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { Recipe, RecipeCategory } from '../types';
 
 const CHEF_PROFILE_STORAGE_KEY = 'ce_lims_kitchen_chef_profile_v1';
@@ -33,6 +35,7 @@ interface SettingsTabProps {
   customAvatarUrl?: string;
   onCustomAvatarChange?: (avatarUrl: string) => void;
   onSignOut: () => void;
+  onNotify?: (message: string, type?: 'success' | 'info' | 'error') => void;
 }
 
 export interface ImportedAppData {
@@ -63,14 +66,19 @@ export default function SettingsTab({
   currentUser,
   customAvatarUrl = '',
   onCustomAvatarChange,
-  onSignOut
+  onSignOut,
+  onNotify
 }: SettingsTabProps) {
   const [profile, setProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
+  const [savedProfile, setSavedProfile] = useState<ChefProfile>(DEFAULT_CHEF_PROFILE);
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>('system');
   const [dataMessage, setDataMessage] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const authDisplayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || '';
   const authEmail = currentUser?.email || '';
-  const profileAvatarUrl = customAvatarUrl || profile.photo || currentUser?.photoURL || '';
+  const profileAvatarUrl = profile.photo || customAvatarUrl || currentUser?.photoURL || '';
+  const isProfileDirty = JSON.stringify(profile) !== JSON.stringify(savedProfile);
   const profileInitials = (profile.name || authDisplayName || 'CL')
     .split(' ')
     .map(part => part.charAt(0))
@@ -84,13 +92,18 @@ export default function SettingsTab({
 
     if (cachedProfile) {
       try {
-        setProfile({
+        const nextProfile = {
           ...DEFAULT_CHEF_PROFILE,
           ...JSON.parse(cachedProfile)
-        });
+        };
+        setProfile(nextProfile);
+        setSavedProfile(nextProfile);
       } catch (err) {
         setProfile(DEFAULT_CHEF_PROFILE);
+        setSavedProfile(DEFAULT_CHEF_PROFILE);
       }
+    } else {
+      setSavedProfile(DEFAULT_CHEF_PROFILE);
     }
 
     if (cachedAppearance && ['light', 'dark', 'system'].includes(cachedAppearance)) {
@@ -100,11 +113,8 @@ export default function SettingsTab({
   }, []);
 
   const updateProfile = (field: keyof ChefProfile, value: string) => {
-    setProfile(prev => {
-      const nextProfile = { ...prev, [field]: value };
-      localStorage.setItem(CHEF_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
-      return nextProfile;
-    });
+    setProfile(prev => ({ ...prev, [field]: value }));
+    setProfileMessage('');
   };
 
   const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,10 +126,61 @@ export default function SettingsTab({
       if (event.target?.result) {
         const nextPhoto = event.target.result as string;
         updateProfile('photo', nextPhoto);
-        onCustomAvatarChange?.(nextPhoto);
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const validateProfile = () => {
+    if (!profile.name.trim()) return 'Name is required.';
+    if (!profile.jobTitle.trim()) return 'Job title is required.';
+    if (!profile.bio.trim()) return 'Bio is required.';
+    return '';
+  };
+
+  const handleSaveProfile = async () => {
+    const validationError = validateProfile();
+    if (validationError) {
+      setProfileMessage(validationError);
+      onNotify?.(validationError, 'error');
+      return;
+    }
+
+    const nextProfile: ChefProfile = {
+      photo: profile.photo,
+      name: profile.name.trim(),
+      jobTitle: profile.jobTitle.trim(),
+      yearsExperience: profile.yearsExperience.trim(),
+      bio: profile.bio.trim(),
+      quote: profile.quote.trim()
+    };
+
+    try {
+      setIsSavingProfile(true);
+      localStorage.setItem(CHEF_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
+
+      if (currentUser && db) {
+        await setDoc(doc(db, 'users', currentUser.uid), {
+          profile: nextProfile,
+          displayName: nextProfile.name,
+          photoURL: nextProfile.photo || currentUser.photoURL || '',
+          email: currentUser.email || '',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      setProfile(nextProfile);
+      setSavedProfile(nextProfile);
+      onCustomAvatarChange?.(nextProfile.photo || '');
+      setProfileMessage('Profile updated successfully.');
+      onNotify?.('Profile updated successfully.', 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Profile update failed.';
+      setProfileMessage(message);
+      onNotify?.(message, 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleAppearanceChange = (mode: AppearanceMode) => {
@@ -193,6 +254,7 @@ export default function SettingsTab({
             ...importedData.profile
           };
           setProfile(nextProfile);
+          setSavedProfile(nextProfile);
           localStorage.setItem(CHEF_PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
           onCustomAvatarChange?.(nextProfile.photo || '');
           importedData.profile = nextProfile;
@@ -218,6 +280,7 @@ export default function SettingsTab({
 
     onResetApp();
     setProfile(DEFAULT_CHEF_PROFILE);
+    setSavedProfile(DEFAULT_CHEF_PROFILE);
     setAppearanceMode('system');
     applyAppearanceMode('system');
     setDataMessage('Local app data has been reset.');
@@ -293,6 +356,21 @@ export default function SettingsTab({
               />
             </div>
           </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 border-t border-surface-container pt-4">
+          {profileMessage && (
+            <p className="font-sans text-xs font-bold text-secondary sm:mr-auto">
+              {profileMessage}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleSaveProfile}
+            disabled={!isProfileDirty || isSavingProfile}
+            className="rounded-full bg-primary disabled:bg-outline-variant disabled:cursor-not-allowed text-on-primary px-5 py-3 text-xs font-sans font-bold active:scale-95 transition-all"
+          >
+            {isSavingProfile ? 'Saving...' : 'Save Changes'}
+          </button>
         </div>
       </section>
 
