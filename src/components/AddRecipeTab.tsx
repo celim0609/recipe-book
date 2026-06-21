@@ -10,7 +10,7 @@ import { Recipe, Ingredient, MethodStep, RecipeCategory, UserRole } from '../typ
 import { generateRecipeStepsWithAI, scanRecipeImageWithGemini } from '../services/gemini';
 import { normalizeIngredientForDisplay, parseIngredientLines } from '../utils/ingredientParser';
 import { FALLBACK_CATEGORY_NAME, getRecipeCategories, normalizeRecipeCategories } from '../utils/categoryUtils';
-import { canCreateKitchenDictionaryEntry, isKnownKitchenDictionaryIngredientName } from '../services/kitchenDictionary';
+import { canCreateKitchenDictionaryEntry, createKitchenDictionaryEntry, isKnownKitchenDictionaryIngredientName } from '../services/kitchenDictionary';
 
 const MAX_COVER_IMAGE_SIDE = 1200;
 const MAX_COVER_IMAGE_BYTES = 500 * 1024;
@@ -686,6 +686,26 @@ export default function AddRecipeTab({
       && !isKnownKitchenDictionaryIngredientName(ingredient.name);
   };
 
+  const handleAddIngredientToDictionary = (ingredient: Ingredient) => {
+    const normalizedName = ingredient.name.replace(/\s+/g, ' ').trim();
+    if (!normalizedName) return;
+
+    const dictionaryEntry = createKitchenDictionaryEntry(userRole, {
+      english: ingredient.englishName?.trim() || normalizedName,
+      chinese: ingredient.chineseName?.trim() || normalizedName,
+      category: 'Uncategorized',
+      aliases: []
+    });
+    const normalizedIngredient = normalizeIngredientForDisplay({
+      ...ingredient,
+      name: dictionaryEntry.english
+    });
+
+    setIngredients(prev =>
+      prev.map(item => (item.id === ingredient.id ? normalizedIngredient : item))
+    );
+  };
+
   const categoryOptions = categories.filter(category => category.name !== FALLBACK_CATEGORY_NAME);
 
   const toggleCategory = (categoryName: string) => {
@@ -893,8 +913,9 @@ export default function AddRecipeTab({
     if (recipe.cookTime) setCookTime(recipe.cookTime);
     if (recipe.chefNotes) setChefNotes(recipe.chefNotes);
     if (recipe.scannedImageDataUrl) setScannedImageDataUrl(recipe.scannedImageDataUrl);
-    setIngredients(recipe.ingredients);
-    setImportedIngredientIds(recipe.ingredients.map(ingredient => ingredient.id));
+    const normalizedImportedIngredients = recipe.ingredients.map(normalizeIngredientForDisplay);
+    setIngredients(normalizedImportedIngredients);
+    setImportedIngredientIds(normalizedImportedIngredients.map(ingredient => ingredient.id));
     setMethodSteps(recipe.method.length > 0
       ? recipe.method
       : [{ id: `step_import_blank_${Date.now()}`, stepNumber: 1, description: '', image: '' }]
@@ -1491,6 +1512,7 @@ export default function AddRecipeTab({
               {shouldShowAddToDictionary(ing) && (
                 <button
                   type="button"
+                  onClick={() => handleAddIngredientToDictionary(ing)}
                   className="col-span-2 sm:col-span-full justify-self-start rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary/10"
                 >
                   Add to Kitchen Dictionary

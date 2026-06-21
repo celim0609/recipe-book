@@ -7,6 +7,8 @@ import ingredients from '../data/dictionary/ingredients.json';
 import { KitchenDictionaryIngredient, UserRole } from '../types';
 import { isAdminRole } from '../utils/userRoles';
 
+const CUSTOM_DICTIONARY_STORAGE_KEY = 'misechef_kitchen_dictionary_custom_entries_v1';
+
 const normalizeDictionaryEntry = (entry: KitchenDictionaryIngredient): KitchenDictionaryIngredient => ({
   chinese: entry.chinese.trim(),
   english: entry.english.trim(),
@@ -20,9 +22,41 @@ const KITCHEN_DICTIONARY_INGREDIENTS = (ingredients as KitchenDictionaryIngredie
   .map(normalizeDictionaryEntry)
   .filter(entry => entry.chinese && entry.english);
 
+let customKitchenDictionaryIngredients: KitchenDictionaryIngredient[] = [];
+
+const loadCustomKitchenDictionaryIngredients = () => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const cached = window.localStorage.getItem(CUSTOM_DICTIONARY_STORAGE_KEY);
+    if (!cached) return [];
+
+    const parsed = JSON.parse(cached);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map(entry => normalizeDictionaryEntry(entry as KitchenDictionaryIngredient))
+      .filter(entry => entry.chinese && entry.english);
+  } catch (err) {
+    return [];
+  }
+};
+
+const saveCustomKitchenDictionaryIngredients = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(CUSTOM_DICTIONARY_STORAGE_KEY, JSON.stringify(customKitchenDictionaryIngredients));
+};
+
+customKitchenDictionaryIngredients = loadCustomKitchenDictionaryIngredients();
+
+const getAllKitchenDictionaryIngredients = () => [
+  ...KITCHEN_DICTIONARY_INGREDIENTS,
+  ...customKitchenDictionaryIngredients
+];
+
 const normalizeDictionaryKey = (value: string) => value.trim().toLowerCase();
 
-const KITCHEN_DICTIONARY_LOOKUP = KITCHEN_DICTIONARY_INGREDIENTS.reduce<Record<string, KitchenDictionaryIngredient>>((acc, entry) => {
+const buildKitchenDictionaryLookup = () => getAllKitchenDictionaryIngredients().reduce<Record<string, KitchenDictionaryIngredient>>((acc, entry) => {
   [
     entry.chinese,
     entry.english,
@@ -56,8 +90,10 @@ const getKitchenDictionaryLookupCandidates = (name: string) => {
 };
 
 export const findKitchenDictionaryIngredientByName = (name: string) => {
+  const dictionaryLookup = buildKitchenDictionaryLookup();
+
   for (const candidate of getKitchenDictionaryLookupCandidates(name)) {
-    const entry = KITCHEN_DICTIONARY_LOOKUP[normalizeDictionaryKey(candidate)];
+    const entry = dictionaryLookup[normalizeDictionaryKey(candidate)];
     if (entry) return entry;
   }
 
@@ -102,9 +138,37 @@ export const isKnownKitchenDictionaryIngredientName = (name: string) => {
   return Boolean(findKitchenDictionaryIngredientByName(name));
 };
 
+export const createKitchenDictionaryEntry = (
+  role: UserRole,
+  entry: KitchenDictionaryIngredient
+) => {
+  if (!canCreateKitchenDictionaryEntry(role)) {
+    throw new Error('Only admin users can add Kitchen Dictionary entries.');
+  }
+
+  const normalizedEntry = normalizeDictionaryEntry(entry);
+  if (!normalizedEntry.chinese || !normalizedEntry.english) {
+    throw new Error('Ingredient name is required.');
+  }
+
+  const existingEntry = findKitchenDictionaryIngredientByName(normalizedEntry.english)
+    || findKitchenDictionaryIngredientByName(normalizedEntry.chinese)
+    || normalizedEntry.aliases.map(findKitchenDictionaryIngredientByName).find(Boolean);
+
+  if (existingEntry) return existingEntry;
+
+  customKitchenDictionaryIngredients = [
+    ...customKitchenDictionaryIngredients,
+    normalizedEntry
+  ];
+  saveCustomKitchenDictionaryIngredients();
+
+  return normalizedEntry;
+};
+
 export const getKitchenDictionaryIngredients = (): KitchenDictionaryIngredient[] => {
   if (!canReadKitchenDictionary()) return [];
-  return KITCHEN_DICTIONARY_INGREDIENTS.map(entry => ({
+  return getAllKitchenDictionaryIngredients().map(entry => ({
     ...entry,
     aliases: [...entry.aliases]
   }));
@@ -114,7 +178,7 @@ export const getKitchenDictionaryCategories = (): string[] => {
   if (!canReadKitchenDictionary()) return [];
 
   return Array.from(new Set(
-    KITCHEN_DICTIONARY_INGREDIENTS
+    getAllKitchenDictionaryIngredients()
       .map(entry => entry.category)
       .filter(Boolean)
   )).sort((a, b) => a.localeCompare(b));
