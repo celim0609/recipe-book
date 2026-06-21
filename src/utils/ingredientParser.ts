@@ -62,23 +62,36 @@ const TRADITIONAL_CHINESE_UNIT_GRAMS: Record<string, number> = {
   '两': 37.5,
   '斤': 600
 };
-const CHINESE_INGREDIENT_NAMES: Record<string, { en: string; zh: string }> = {
-  '水': { en: 'Water', zh: '水' },
-  '白凉粉': { en: 'White Jelly Powder', zh: '白凉粉' },
-  '白涼粉': { en: 'White Jelly Powder', zh: '白涼粉' },
-  '柚子肉': { en: 'Pomelo Pulp', zh: '柚子肉' },
-  '芒果汁': { en: 'Mango Juice', zh: '芒果汁' },
-  '芒果粒': { en: 'Mango Cubes', zh: '芒果粒' },
-  '芋头': { en: 'Taro', zh: '芋头' },
-  '芋頭': { en: 'Taro', zh: '芋頭' },
-  '盐': { en: 'Salt', zh: '盐' },
-  '鹽': { en: 'Salt', zh: '鹽' },
-  '糖': { en: 'Sugar', zh: '糖' },
-  '鸡粉': { en: 'Chicken powder', zh: '鸡粉' },
-  '雞粉': { en: 'Chicken powder', zh: '雞粉' },
-  '薯粉': { en: 'Tapioca starch', zh: '薯粉' },
-  '粟粉': { en: 'Corn starch', zh: '粟粉' }
-};
+const INGREDIENT_NORMALIZATION_ENTRIES: Array<{ standardName: string; aliases: string[] }> = [
+  { standardName: 'Sugar', aliases: ['糖', '白糖', '砂糖'] },
+  { standardName: 'Water', aliases: ['水'] },
+  { standardName: 'Eggs', aliases: ['鸡蛋', '雞蛋', '蛋'] },
+  { standardName: 'Chicken Powder', aliases: ['鸡粉', '雞粉'] },
+  { standardName: 'Salt', aliases: ['盐', '鹽'] },
+  { standardName: 'White Pepper', aliases: ['胡椒粉'] },
+  { standardName: 'Black Pepper', aliases: ['黑胡椒'] },
+  { standardName: 'Evaporated Milk', aliases: ['花奶', '淡奶'] },
+  { standardName: 'Sweetened Condensed Milk', aliases: ['炼奶', '煉奶'] },
+  { standardName: 'Milk', aliases: ['牛奶'] },
+  { standardName: 'Fresh Milk', aliases: ['鲜奶', '鮮奶'] },
+  { standardName: 'White Jelly Powder', aliases: ['白凉粉', '白涼粉'] },
+  { standardName: 'Sago', aliases: ['西米'] },
+  { standardName: 'Mango Juice', aliases: ['芒果汁'] },
+  { standardName: 'Mango Cubes', aliases: ['芒果粒'] },
+  { standardName: 'Pomelo Pulp', aliases: ['柚子肉'] },
+  { standardName: 'Ice Cubes', aliases: ['冰粒'] },
+  { standardName: 'Taro', aliases: ['芋头', '芋頭'] },
+  { standardName: 'Tapioca Starch', aliases: ['薯粉'] },
+  { standardName: 'Corn Starch', aliases: ['粟粉'] }
+];
+
+const INGREDIENT_NORMALIZATION_DICTIONARY = INGREDIENT_NORMALIZATION_ENTRIES.reduce<Record<string, string>>((acc, entry) => {
+  entry.aliases.forEach(alias => {
+    acc[alias.trim().toLowerCase()] = entry.standardName;
+  });
+  acc[entry.standardName.trim().toLowerCase()] = entry.standardName;
+  return acc;
+}, {});
 
 const cleanIngredientLine = (line: string) => {
   return line
@@ -160,8 +173,7 @@ const normalizeIngredientName = (value: string) => {
     .map(part => part.trim())
     .filter(Boolean)[0] || trimmed;
 
-  const translatedName = CHINESE_INGREDIENT_NAMES[pipePrimaryName];
-  return translatedName ? `${translatedName.en} (${translatedName.zh})` : pipePrimaryName;
+  return INGREDIENT_NORMALIZATION_DICTIONARY[pipePrimaryName.toLowerCase()] || pipePrimaryName;
 };
 
 const normalizeParsedQuantityUnit = (qty: string, unit: string) => {
