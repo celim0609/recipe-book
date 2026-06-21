@@ -75,6 +75,13 @@ export const DEFAULT_CHEF_PROFILE: ChefProfile = {
 
 export type UserRole = 'admin' | 'user';
 
+export interface KitchenDictionaryIngredient {
+  chinese: string;
+  english: string;
+  category: string;
+  aliases: string[];
+}
+
 export interface Collection {
   id: string;
   name: string;
