@@ -34,7 +34,7 @@ export const firebaseApp: FirebaseApp | null = isFirebaseConfigured
 
 export const auth: Auth | null = firebaseApp ? getAuth(firebaseApp) : null;
 export const db: Firestore | null = firebaseApp ? getFirestore(firebaseApp) : null;
-export const functions: Functions | null = firebaseApp ? getFunctions(firebaseApp) : null;
+export const functions: Functions | null = firebaseApp ? getFunctions(firebaseApp, 'us-central1') : null;
 export const storage: FirebaseStorage | null = firebaseApp ? getStorage(firebaseApp) : null;
 
 export const authPersistenceReady = auth

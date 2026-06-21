@@ -58,11 +58,14 @@ const stripJsonCodeFence = value => readString(value)
   .replace(/```$/i, '')
   .trim();
 
-const parseJsonResponse = (text, fallback) => {
+const parseJsonResponse = (text, fallback, includeDiagnostics = false) => {
   try {
     return JSON.parse(stripJsonCodeFence(text || JSON.stringify(fallback)));
   } catch (err) {
-    throw new HttpsError('internal', 'AI returned invalid JSON.');
+    throw new HttpsError('internal', 'AI returned invalid JSON.', {
+      reason: 'invalid-json',
+      rawTextPreview: includeDiagnostics ? String(text || '').slice(0, 1000) : undefined
+    });
   }
 };
 
@@ -162,14 +165,28 @@ const callGeminiWithRetry = async generate => {
 
 const getAi = () => new GoogleGenAI({ apiKey: geminiApiKey.value() });
 
+const getErrorDiagnostics = err => ({
+  name: err?.name || '',
+  message: err?.message || '',
+  code: err?.code || '',
+  status: err?.status || ''
+});
+
+const wrapInternalError = (friendlyMessage, err, includeDiagnostics = false) => new HttpsError('internal', friendlyMessage, {
+  reason: 'backend-error',
+  diagnostics: includeDiagnostics ? getErrorDiagnostics(err) : undefined
+});
+
 export const scanRecipeImage = onCall({
   region: REGION,
+  invoker: 'public',
   secrets: [geminiApiKey],
   timeoutSeconds: 120,
   memory: '512MiB'
 }, async request => {
   const requesterId = getRequesterId(request);
   const action = 'scanRecipeImage';
+  const includeDiagnostics = request.data?.debug === true;
   let attempts = 0;
 
   try {
@@ -188,6 +205,7 @@ export const scanRecipeImage = onCall({
 
     logger.info('AI recipe scan requested', { requesterId, action, mimeType, imageBytesApprox: Math.round(imageBase64.length * 0.75) });
     const ai = getAi();
+    logger.info('Calling Gemini for recipe scan', { requesterId, action, model: MODEL });
     const { response, attempts: usedAttempts } = await callGeminiWithRetry(() => ai.models.generateContent({
       model: MODEL,
       contents: [
@@ -214,30 +232,40 @@ export const scanRecipeImage = onCall({
       }
     }));
     attempts = usedAttempts;
+    logger.info('Gemini recipe scan response received', { requesterId, action, attempts, hasText: Boolean(response.text) });
 
-    const parsed = parseJsonResponse(response.text, {});
+    const parsed = parseJsonResponse(response.text, {}, includeDiagnostics);
     const recipe = sanitizeScannedRecipe(parsed);
+    logger.info('AI recipe scan parsed', {
+      requesterId,
+      action,
+      titlePresent: Boolean(recipe.title),
+      ingredientCount: recipe.ingredients.length,
+      methodStepCount: recipe.method.length
+    });
     await logRequest({ requesterId, action, status: 'success', attempts });
     return { recipe };
   } catch (err) {
     attempts = attempts || 1;
     const errorCode = err instanceof HttpsError ? err.code : 'internal';
-    logger.error('AI recipe scan failed', { requesterId, action, attempts, errorCode, message: err?.message });
+    logger.error('AI recipe scan failed', { requesterId, action, attempts, errorCode, ...getErrorDiagnostics(err) });
     await logRequest({ requesterId, action, status: 'failed', attempts, errorCode }).catch(() => undefined);
 
     if (err instanceof HttpsError) throw err;
-    throw new HttpsError('internal', 'AI recipe scan failed. Please try again.');
+    throw wrapInternalError('AI recipe scan failed. Please try again.', err, includeDiagnostics);
   }
 });
 
 export const generateRecipeSteps = onCall({
   region: REGION,
+  invoker: 'public',
   secrets: [geminiApiKey],
   timeoutSeconds: 60,
   memory: '256MiB'
 }, async request => {
   const requesterId = getRequesterId(request);
   const action = 'generateRecipeSteps';
+  const includeDiagnostics = request.data?.debug === true;
   let attempts = 0;
 
   try {
@@ -290,16 +318,16 @@ Rules:
     }));
     attempts = usedAttempts;
 
-    const steps = sanitizeSteps(parseJsonResponse(response.text, []));
+    const steps = sanitizeSteps(parseJsonResponse(response.text, [], includeDiagnostics));
     await logRequest({ requesterId, action, status: 'success', attempts });
     return { steps };
   } catch (err) {
     attempts = attempts || 1;
     const errorCode = err instanceof HttpsError ? err.code : 'internal';
-    logger.error('AI method draft failed', { requesterId, action, attempts, errorCode, message: err?.message });
+    logger.error('AI method draft failed', { requesterId, action, attempts, errorCode, ...getErrorDiagnostics(err) });
     await logRequest({ requesterId, action, status: 'failed', attempts, errorCode }).catch(() => undefined);
 
     if (err instanceof HttpsError) throw err;
-    throw new HttpsError('internal', 'AI method draft failed. Please try again.');
+    throw wrapInternalError('AI method draft failed. Please try again.', err, includeDiagnostics);
   }
 });

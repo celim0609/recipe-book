@@ -43,6 +43,24 @@ const getDataUrlMimeType = (dataUrl?: string) => {
   return match?.[1] || '';
 };
 
+const getCallableErrorMessage = (err: unknown, fallbackMessage: string) => {
+  const source = err && typeof err === 'object' ? err as Record<string, unknown> : {};
+  const details = source.details && typeof source.details === 'object'
+    ? source.details as Record<string, unknown>
+    : {};
+  const diagnostics = details.diagnostics && typeof details.diagnostics === 'object'
+    ? details.diagnostics as Record<string, unknown>
+    : {};
+  const devMessage = [
+    typeof source.message === 'string' ? source.message : '',
+    typeof details.reason === 'string' ? `Reason: ${details.reason}` : '',
+    typeof diagnostics.message === 'string' ? `Backend: ${diagnostics.message}` : '',
+    typeof source.code === 'string' ? `Code: ${source.code}` : ''
+  ].filter(Boolean).join(' | ');
+
+  return import.meta.env.DEV && devMessage ? devMessage : fallbackMessage;
+};
+
 const normalizeScannedRecipe = (parsed: unknown): GeminiScannedRecipe => {
   const source = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
   const rawIngredients = Array.isArray(source.ingredients) ? source.ingredients : [];
@@ -75,6 +93,15 @@ const normalizeScannedRecipe = (parsed: unknown): GeminiScannedRecipe => {
   return scannedRecipe;
 };
 
+const parseScannedRecipeResponse = (value: unknown) => {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  if (!source.recipe || typeof source.recipe !== 'object') {
+    throw new Error('AI scan returned an unexpected response shape.');
+  }
+
+  return normalizeScannedRecipe(source.recipe);
+};
+
 export const generateRecipeStepsWithAI = async ({
   title,
   category,
@@ -96,6 +123,7 @@ export const generateRecipeStepsWithAI = async ({
       category: string;
       yield: string;
       ingredients: Array<{ name: string; qty: string; unit: string }>;
+      debug?: boolean;
     },
     { steps: string[] }
   >(functions, 'generateRecipeSteps');
@@ -104,7 +132,8 @@ export const generateRecipeStepsWithAI = async ({
     title,
     category,
     yield: recipeYield,
-    ingredients
+    ingredients,
+    debug: import.meta.env.DEV
   });
 
   return Array.isArray(response.data.steps)
@@ -128,17 +157,38 @@ export const scanRecipeImageWithGemini = async ({
   const imageBase64 = imageDataUrl?.split(',')[1] || await readFileAsBase64(file);
   const mimeType = getDataUrlMimeType(imageDataUrl) || file.type || 'image/jpeg';
   onStage?.('reading');
+  console.info('[AI Scan] Invoking callable scanRecipeImage', {
+    mimeType,
+    imageBytesApprox: Math.round(imageBase64.length * 0.75),
+    region: 'us-central1'
+  });
 
   const scanImage = httpsCallable<
-    { imageBase64: string; mimeType: string },
+    { imageBase64: string; mimeType: string; debug?: boolean },
     { recipe: GeminiScannedRecipe }
   >(functions, 'scanRecipeImage');
 
-  const response = await scanImage({
-    imageBase64,
-    mimeType
-  });
+  try {
+    const response = await scanImage({
+      imageBase64,
+      mimeType,
+      debug: import.meta.env.DEV
+    });
 
-  onStage?.('extracting');
-  return normalizeScannedRecipe(response.data.recipe);
+    console.info('[AI Scan] Callable response received', {
+      hasData: Boolean(response.data),
+      hasRecipe: Boolean(response.data?.recipe)
+    });
+    onStage?.('extracting');
+    const recipe = parseScannedRecipeResponse(response.data);
+    console.info('[AI Scan] Callable response parsed', {
+      titlePresent: Boolean(recipe.title),
+      ingredientCount: recipe.ingredients.length,
+      methodStepCount: recipe.method.length
+    });
+    return recipe;
+  } catch (err) {
+    console.error('[AI Scan] Callable failed', err);
+    throw new Error(getCallableErrorMessage(err, 'AI recipe scan failed. Please try again.'));
+  }
 };
