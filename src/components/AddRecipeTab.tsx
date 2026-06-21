@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { ArrowDown, ArrowUp, Camera, FileText, Image as ImageIcon, Plus, Trash2, X, Sparkles, Video } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist/webpack.mjs';
 import { Recipe, Ingredient, MethodStep, RecipeCategory } from '../types';
-import { getGeminiApiKey, scanRecipeImageWithGemini } from '../services/gemini';
+import { generateRecipeStepsWithAI, scanRecipeImageWithGemini } from '../services/gemini';
 import { parseIngredientLines } from '../utils/ingredientParser';
 
 const CREATE_NEW_CATEGORY_VALUE = '__create_new_category__';
@@ -56,20 +56,6 @@ type ParsedImportedRecipe = {
   ingredients: Ingredient[];
   method: MethodStep[];
   sourceText: string;
-};
-
-const parseAiSteps = (text: string) => {
-  const trimmed = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
-  const parsed = JSON.parse(trimmed);
-  const rawSteps = Array.isArray(parsed) ? parsed : parsed.steps;
-
-  if (!Array.isArray(rawSteps)) {
-    throw new Error('AI response did not contain a steps array.');
-  }
-
-  return rawSteps
-    .map(step => String(step).trim())
-    .filter(Boolean);
 };
 
 const cleanImportedLine = (line: string) => {
@@ -700,51 +686,18 @@ export default function AddRecipeTab({
       return;
     }
 
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      setAiStepError('Missing Gemini API key. Add VITE_GEMINI_API_KEY or GEMINI_API_KEY to your local environment.');
-      return;
-    }
-
-    const ingredientLines = cleanIngredients
-      .map(ing => `- ${[ing.qty, ing.unit, ing.name].filter(Boolean).join(' ')}`)
-      .join('\n');
-
-    const prompt = `
-Draft cooking method steps only for this recipe.
-
-Recipe title: ${title.trim()}
-Category: ${category}
-Yield: ${recipeYield.trim() || 'Not specified'}
-Ingredients:
-${ingredientLines}
-
-Rules:
-- Return only a JSON array of strings.
-- Generate method steps only.
-- Do not generate nutrition.
-- Do not generate cost.
-- Do not generate new recipe ideas.
-- Keep steps practical, concise, and editable.
-`;
-
     try {
       setIsGeneratingSteps(true);
-      const { GoogleGenAI, Type } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          }
-        }
+      const draftSteps = await generateRecipeStepsWithAI({
+        title: title.trim(),
+        category,
+        yield: recipeYield.trim(),
+        ingredients: cleanIngredients.map(ing => ({
+          name: ing.name,
+          qty: ing.qty,
+          unit: ing.unit
+        }))
       });
-
-      const draftSteps = parseAiSteps(response.text || '');
       if (draftSteps.length === 0) {
         throw new Error('AI returned no method steps.');
       }
