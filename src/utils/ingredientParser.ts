@@ -35,6 +35,13 @@ const KNOWN_UNITS = [
   'cups',
   'pinch',
   'pinches',
+  '包',
+  '罐',
+  '瓶',
+  '盒',
+  '袋',
+  '粒',
+  '个',
   '钱',
   '兩',
   '两',
@@ -55,16 +62,22 @@ const TRADITIONAL_CHINESE_UNIT_GRAMS: Record<string, number> = {
   '两': 37.5,
   '斤': 600
 };
-const CHINESE_INGREDIENT_NAMES: Record<string, string> = {
-  '芋头': 'Taro',
-  '芋頭': 'Taro',
-  '盐': 'Salt',
-  '鹽': 'Salt',
-  '糖': 'Sugar',
-  '鸡粉': 'Chicken powder',
-  '雞粉': 'Chicken powder',
-  '薯粉': 'Tapioca starch',
-  '粟粉': 'Corn starch'
+const CHINESE_INGREDIENT_NAMES: Record<string, { en: string; zh: string }> = {
+  '水': { en: 'Water', zh: '水' },
+  '白凉粉': { en: 'White Jelly Powder', zh: '白凉粉' },
+  '白涼粉': { en: 'White Jelly Powder', zh: '白涼粉' },
+  '柚子肉': { en: 'Pomelo Pulp', zh: '柚子肉' },
+  '芒果汁': { en: 'Mango Juice', zh: '芒果汁' },
+  '芒果粒': { en: 'Mango Cubes', zh: '芒果粒' },
+  '芋头': { en: 'Taro', zh: '芋头' },
+  '芋頭': { en: 'Taro', zh: '芋頭' },
+  '盐': { en: 'Salt', zh: '盐' },
+  '鹽': { en: 'Salt', zh: '鹽' },
+  '糖': { en: 'Sugar', zh: '糖' },
+  '鸡粉': { en: 'Chicken powder', zh: '鸡粉' },
+  '雞粉': { en: 'Chicken powder', zh: '雞粉' },
+  '薯粉': { en: 'Tapioca starch', zh: '薯粉' },
+  '粟粉': { en: 'Corn starch', zh: '粟粉' }
 };
 
 const cleanIngredientLine = (line: string) => {
@@ -147,7 +160,8 @@ const normalizeIngredientName = (value: string) => {
     .map(part => part.trim())
     .filter(Boolean)[0] || trimmed;
 
-  return CHINESE_INGREDIENT_NAMES[pipePrimaryName] || pipePrimaryName;
+  const translatedName = CHINESE_INGREDIENT_NAMES[pipePrimaryName];
+  return translatedName ? `${translatedName.en} (${translatedName.zh})` : pipePrimaryName;
 };
 
 const normalizeParsedQuantityUnit = (qty: string, unit: string) => {
@@ -173,6 +187,48 @@ const normalizeParsedQuantityUnit = (qty: string, unit: string) => {
     qty: formatQuantity(amount * conversion),
     unit: 'g'
   };
+};
+
+const parseChineseMixedQuantity = (value: string, unit: string) => {
+  const conversion = TRADITIONAL_CHINESE_UNIT_GRAMS[unit];
+  if (!conversion) return null;
+
+  const normalized = value.replace(/\s+/g, '');
+  const mixedMatch = normalized.match(/^(\d+(?:[.,]\d+)?)半$/);
+  if (mixedMatch) {
+    return (Number(mixedMatch[1].replace(',', '.')) + 0.5) * conversion;
+  }
+
+  if (normalized === '半') {
+    return 0.5 * conversion;
+  }
+
+  const amount = parseQuantityNumber(normalized);
+  return amount === null ? null : amount * conversion;
+};
+
+const parseChineseUnitIngredient = (cleaned: string, index: number) => {
+  const chineseUnits = `[${Object.keys(TRADITIONAL_CHINESE_UNIT_GRAMS).join('')}]`;
+  const compact = cleaned.replace(/\s+/g, '');
+  const leadingMatch = compact.match(new RegExp(String.raw`^(\d+(?:[.,]\d+)?|半)(${chineseUnits})(半?)(.+)$`));
+  const trailingMatch = compact.match(new RegExp(String.raw`^(.+?)(\d+(?:[.,]\d+)?|半)(${chineseUnits})(半?)$`));
+  const match = leadingMatch
+    ? { name: leadingMatch[4], quantity: `${leadingMatch[1]}${leadingMatch[3]}`, unit: leadingMatch[2] }
+    : trailingMatch
+      ? { name: trailingMatch[1], quantity: `${trailingMatch[2]}${trailingMatch[4]}`, unit: trailingMatch[3] }
+      : null;
+
+  if (!match?.name) return null;
+
+  const grams = parseChineseMixedQuantity(match.quantity, match.unit);
+  if (grams === null) return null;
+
+  return makeIngredient(cleaned, index, {
+    name: normalizeIngredientName(match.name),
+    qty: formatQuantity(grams),
+    unit: 'g',
+    notes: ''
+  }, 'high');
 };
 
 const splitNotes = (value: string) => {
@@ -227,6 +283,11 @@ export const parseIngredientLine = (line: string, index = 0): ParsedIngredient =
 
   if (!cleaned) {
     return makeIngredient(line, index, { name: '', qty: '', unit: '', notes: '' }, 'low');
+  }
+
+  const chineseUnitIngredient = parseChineseUnitIngredient(cleaned, index);
+  if (chineseUnitIngredient) {
+    return chineseUnitIngredient;
   }
 
   const pipeParts = cleaned.split('|').map(part => part.trim()).filter(Boolean);
