@@ -34,7 +34,11 @@ const KNOWN_UNITS = [
   'cup',
   'cups',
   'pinch',
-  'pinches'
+  'pinches',
+  '钱',
+  '兩',
+  '两',
+  '斤'
 ];
 
 const UNIT_PATTERN = KNOWN_UNITS
@@ -42,7 +46,26 @@ const UNIT_PATTERN = KNOWN_UNITS
   .sort((a, b) => b.length - a.length)
   .join('|');
 
-const QUANTITY_PATTERN = String.raw`(?:\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+|[¼½¾⅓⅔⅛⅜⅝⅞]|(?:\d+\s+)?[¼½¾⅓⅔⅛⅜⅝⅞]|(?:\d+\s+)?\d+\s*\/\s*\d+)`;
+const QUANTITY_PATTERN = String.raw`(?:\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+|[¼½¾⅓⅔⅛⅜⅝⅞]|(?:\d+\s+)?[¼½¾⅓⅔⅛⅜⅝⅞]|(?:\d+\s+)?\d+\s*\/\s*\d+|半)`;
+const QUALITATIVE_UNITS = ['to taste', 'as needed', '适量', '少许'];
+const QUALITATIVE_PATTERN = String.raw`(?:to taste|as needed|适量|少许)`;
+const TRADITIONAL_CHINESE_UNIT_GRAMS: Record<string, number> = {
+  '钱': 3.75,
+  '兩': 37.5,
+  '两': 37.5,
+  '斤': 600
+};
+const CHINESE_INGREDIENT_NAMES: Record<string, string> = {
+  '芋头': 'Taro',
+  '芋頭': 'Taro',
+  '盐': 'Salt',
+  '鹽': 'Salt',
+  '糖': 'Sugar',
+  '鸡粉': 'Chicken powder',
+  '雞粉': 'Chicken powder',
+  '薯粉': 'Tapioca starch',
+  '粟粉': 'Corn starch'
+};
 
 const cleanIngredientLine = (line: string) => {
   return line
@@ -60,11 +83,96 @@ const normalizeQuantity = (value: string) => {
     .trim();
 };
 
+const parseQuantityNumber = (value: string) => {
+  const normalized = normalizeQuantity(value).replace(',', '.');
+  const unicodeFractions: Record<string, number> = {
+    '¼': 0.25,
+    '½': 0.5,
+    '¾': 0.75,
+    '⅓': 1 / 3,
+    '⅔': 2 / 3,
+    '⅛': 0.125,
+    '⅜': 0.375,
+    '⅝': 0.625,
+    '⅞': 0.875,
+    '半': 0.5
+  };
+
+  if (unicodeFractions[normalized] !== undefined) return unicodeFractions[normalized];
+
+  const mixedUnicode = normalized.match(/^(\d+)\s*([¼½¾⅓⅔⅛⅜⅝⅞])$/);
+  if (mixedUnicode) {
+    return Number(mixedUnicode[1]) + unicodeFractions[mixedUnicode[2]];
+  }
+
+  const fraction = normalized.match(/^(\d+)\/(\d+)$/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    return denominator ? numerator / denominator : null;
+  }
+
+  const mixedFraction = normalized.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if (mixedFraction) {
+    const whole = Number(mixedFraction[1]);
+    const numerator = Number(mixedFraction[2]);
+    const denominator = Number(mixedFraction[3]);
+    return denominator ? whole + numerator / denominator : null;
+  }
+
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+};
+
+const formatQuantity = (value: number) => {
+  return Number.isInteger(value)
+    ? String(value)
+    : String(Number(value.toFixed(2))).replace(/\.0+$/, '');
+};
+
 const normalizeUnit = (unit: string) => {
   const trimmed = unit.trim();
   if (trimmed.toLowerCase() === 'liter' || trimmed.toLowerCase() === 'litre') return 'L';
   if (trimmed === 'l') return 'L';
   return trimmed;
+};
+
+const normalizeIngredientName = (value: string) => {
+  const trimmed = value
+    .replace(/\s*\(([^)]+)\)\s*$/, (_match, alias) => ` ${alias}`)
+    .replace(/\s+/g, ' ')
+    .trim();
+  const pipePrimaryName = trimmed
+    .split('|')
+    .map(part => part.trim())
+    .filter(Boolean)[0] || trimmed;
+
+  return CHINESE_INGREDIENT_NAMES[pipePrimaryName] || pipePrimaryName;
+};
+
+const normalizeParsedQuantityUnit = (qty: string, unit: string) => {
+  const normalizedUnit = normalizeUnit(unit);
+  const conversion = TRADITIONAL_CHINESE_UNIT_GRAMS[normalizedUnit];
+
+  if (!conversion) {
+    return {
+      qty: normalizeQuantity(qty),
+      unit: normalizedUnit
+    };
+  }
+
+  const amount = parseQuantityNumber(qty);
+  if (amount === null) {
+    return {
+      qty: normalizeQuantity(qty),
+      unit: normalizedUnit
+    };
+  }
+
+  return {
+    qty: formatQuantity(amount * conversion),
+    unit: 'g'
+  };
 };
 
 const splitNotes = (value: string) => {
@@ -90,7 +198,7 @@ const splitNotes = (value: string) => {
   }
 
   return {
-    name: text.trim(),
+    name: normalizeIngredientName(text),
     notes: notes.filter(Boolean).join(', ')
   };
 };
@@ -121,6 +229,51 @@ export const parseIngredientLine = (line: string, index = 0): ParsedIngredient =
     return makeIngredient(line, index, { name: '', qty: '', unit: '', notes: '' }, 'low');
   }
 
+  const pipeParts = cleaned.split('|').map(part => part.trim()).filter(Boolean);
+  if (pipeParts.length >= 2) {
+    const quantityIndex = pipeParts.findIndex(part =>
+      new RegExp(String.raw`^${QUANTITY_PATTERN}\s*(${UNIT_PATTERN})?$`, 'i').test(part) ||
+      new RegExp(String.raw`^${QUALITATIVE_PATTERN}$`, 'i').test(part)
+    );
+    const namePart = pipeParts.find((_part, partIndex) => partIndex !== quantityIndex) || pipeParts[0];
+    const quantityPart = quantityIndex >= 0 ? pipeParts[quantityIndex] : '';
+
+    if (quantityPart && namePart) {
+      const qualitative = quantityPart.match(new RegExp(String.raw`^(${QUALITATIVE_PATTERN})$`, 'i'));
+      const quantityUnit = quantityPart.match(new RegExp(String.raw`^(${QUANTITY_PATTERN})\s*(${UNIT_PATTERN})?$`, 'i'));
+
+      if (qualitative) {
+        return makeIngredient(cleaned, index, {
+          name: normalizeIngredientName(namePart),
+          qty: '',
+          unit: qualitative[1],
+          notes: pipeParts.filter(part => part !== namePart && part !== quantityPart).join(', ')
+        }, 'high');
+      }
+
+      if (quantityUnit) {
+        const parsed = normalizeParsedQuantityUnit(quantityUnit[1] || '', quantityUnit[2] || '');
+        return makeIngredient(cleaned, index, {
+          name: normalizeIngredientName(namePart),
+          qty: parsed.qty,
+          unit: parsed.unit,
+          notes: pipeParts.filter(part => part !== namePart && part !== quantityPart).join(', ')
+        }, parsed.unit ? 'high' : 'medium');
+      }
+    }
+  }
+
+  const qualitativeMatch = cleaned.match(new RegExp(String.raw`^(.+?)(?:\s*[:：–—-]\s*|\s+)(${QUALITATIVE_PATTERN})$`, 'i'));
+  if (qualitativeMatch) {
+    const split = splitNotes(qualitativeMatch[1] || '');
+    return makeIngredient(cleaned, index, {
+      name: split.name,
+      qty: '',
+      unit: qualitativeMatch[2] || '',
+      notes: split.notes
+    }, 'high');
+  }
+
   const countableOnlyMatch = cleaned.match(new RegExp(String.raw`^(${QUANTITY_PATTERN})\s*(egg|eggs)\b$`, 'i'));
   if (countableOnlyMatch) {
     const rawName = countableOnlyMatch[2] || '';
@@ -132,14 +285,14 @@ export const parseIngredientLine = (line: string, index = 0): ParsedIngredient =
     }, 'high');
   }
 
-  const leadingMatch = cleaned.match(new RegExp(String.raw`^(${QUANTITY_PATTERN})\s*(${UNIT_PATTERN})?\b\s*(.+)$`, 'i'));
+  const leadingMatch = cleaned.match(new RegExp(String.raw`^(${QUANTITY_PATTERN})\s*(${UNIT_PATTERN})?\s*(.+)$`, 'i'));
   if (leadingMatch) {
-    const qty = normalizeQuantity(leadingMatch[1] || '');
     const rawUnit = normalizeUnit(leadingMatch[2] || '');
+    const parsed = normalizeParsedQuantityUnit(leadingMatch[1] || '', rawUnit);
     const remainder = (leadingMatch[3] || '').trim();
     const split = splitNotes(remainder);
 
-    if (qty && remainder) {
+    if (parsed.qty && remainder) {
       const unit = isUnitAsIngredient(rawUnit) ? 'pcs' : rawUnit;
       const name = isUnitAsIngredient(rawUnit)
         ? [rawUnit, split.name].filter(Boolean).join(' ')
@@ -147,26 +300,25 @@ export const parseIngredientLine = (line: string, index = 0): ParsedIngredient =
 
       return makeIngredient(cleaned, index, {
         name: name || cleaned,
-        qty,
-        unit,
+        qty: isUnitAsIngredient(rawUnit) ? parsed.qty : parsed.qty,
+        unit: isUnitAsIngredient(rawUnit) ? 'pcs' : parsed.unit,
         notes: split.notes
       }, rawUnit ? 'high' : 'medium');
     }
   }
 
-  const trailingMatch = cleaned.match(new RegExp(String.raw`^(.+?)\s*(?:[-–—]\s*)?(${QUANTITY_PATTERN})\s*(${UNIT_PATTERN})?$`, 'i'));
+  const trailingMatch = cleaned.match(new RegExp(String.raw`^(.+?)\s*(?:[:：|]|[-–—]\s*)?\s*(${QUANTITY_PATTERN})\s*(${UNIT_PATTERN})?$`, 'i'));
   if (trailingMatch) {
     const split = splitNotes(trailingMatch[1] || '');
-    const qty = normalizeQuantity(trailingMatch[2] || '');
-    const unit = normalizeUnit(trailingMatch[3] || '');
+    const parsed = normalizeParsedQuantityUnit(trailingMatch[2] || '', trailingMatch[3] || '');
 
-    if (split.name && qty) {
+    if (split.name && parsed.qty) {
       return makeIngredient(cleaned, index, {
         name: split.name,
-        qty,
-        unit,
+        qty: parsed.qty,
+        unit: parsed.unit,
         notes: split.notes
-      }, unit ? 'high' : 'medium');
+      }, parsed.unit ? 'high' : 'medium');
     }
   }
 

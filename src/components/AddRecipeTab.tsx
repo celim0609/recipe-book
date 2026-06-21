@@ -69,6 +69,26 @@ const isSectionHeading = (line: string, keywords: string[]) => {
   return keywords.some(keyword => normalized === keyword);
 };
 
+const isAnyRecipeSectionHeading = (line: string) => {
+  return isSectionHeading(line, [
+    'ingredients',
+    'ingredient',
+    'ingredient list',
+    'method',
+    'steps',
+    'instructions',
+    'directions',
+    'procedure',
+    'preparation',
+    'chef notes',
+    'notes'
+  ]);
+};
+
+const cleanMarkdownHeading = (line: string) => {
+  return line.replace(/^#{1,6}\s+/, '').trim();
+};
+
 const parseTimeToMinutes = (value: string) => {
   const normalized = value.toLowerCase().replace(/mins?\b/g, 'minutes').replace(/hrs?\b/g, 'hours');
   const hourMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:hours?|h)\b/);
@@ -102,10 +122,18 @@ const parsePastedRecipe = (rawText: string) => {
   let parsedChefNotes = '';
   const ingredientLines: string[] = [];
   const methodLines: string[] = [];
+  const candidateIngredientLines: string[] = [];
   let activeSection: 'ingredients' | 'method' | null = null;
 
   lines.forEach((line, index) => {
-    const titleMatch = line.match(/^(recipe\s*)?title\s*[:：]\s*(.+)$/i);
+    const cleanedLine = cleanImportedLine(cleanMarkdownHeading(line));
+    const parsedLineIngredient = parseIngredientLines([line])[0];
+    const lineLooksLikeIngredient = Boolean(
+      parsedLineIngredient &&
+      parsedLineIngredient.confidence !== 'low' &&
+      (parsedLineIngredient.qty || parsedLineIngredient.unit)
+    );
+    const titleMatch = line.match(/^(recipe\s*name|recipe\s*title|title|name)\s*[:：]\s*(.+)$/i);
     const yieldMatch = line.match(/^(yield|makes|serves|servings)\s*[:：]\s*(.+)$/i);
     const servingsMatch = line.match(/^(serves|servings)\s*[:：]?\s*(.+)$/i);
     const prepTimeMatch = line.match(/^(prep(?:aration)?\s*time|prep)\s*[:：]?\s*(.+)$/i);
@@ -113,6 +141,11 @@ const parsePastedRecipe = (rawText: string) => {
     const chefNotesMatch = line.match(/^(chef\s*notes?|notes?)\s*[:：]?\s*(.+)$/i);
     const ingredientsMatch = line.match(/^(ingredients?|ingredient list)\s*[:：]?\s*(.*)$/i);
     const methodMatch = line.match(/^(method|steps|instructions|directions|procedure|preparation)\s*[:：]?\s*(.*)$/i);
+
+    if (!parsedTitle && /^#{1,6}\s+/.test(line) && cleanedLine && !isAnyRecipeSectionHeading(cleanedLine)) {
+      parsedTitle = cleanedLine;
+      return;
+    }
 
     if (titleMatch) {
       parsedTitle = titleMatch[2].trim();
@@ -164,8 +197,8 @@ const parsePastedRecipe = (rawText: string) => {
       return;
     }
 
-    if (!parsedTitle && index === 0 && !line.includes(':')) {
-      parsedTitle = cleanImportedLine(line);
+    if (!parsedTitle && !line.includes(':') && !isAnyRecipeSectionHeading(cleanedLine) && !lineLooksLikeIngredient) {
+      parsedTitle = cleanedLine;
       return;
     }
 
@@ -173,6 +206,10 @@ const parsePastedRecipe = (rawText: string) => {
       ingredientLines.push(line);
     } else if (activeSection === 'method') {
       methodLines.push(line);
+    } else {
+      if (lineLooksLikeIngredient) {
+        candidateIngredientLines.push(line);
+      }
     }
   });
 
@@ -185,6 +222,10 @@ const parsePastedRecipe = (rawText: string) => {
     }
   }
 
+  if (ingredientLines.length === 0) {
+    ingredientLines.push(...candidateIngredientLines);
+  }
+
   if (methodLines.length === 0) {
     const methodStart = lines.findIndex(line => isSectionHeading(line, ['method', 'steps', 'instructions', 'directions', 'procedure', 'preparation']));
     if (methodStart >= 0) {
@@ -193,7 +234,7 @@ const parsePastedRecipe = (rawText: string) => {
   }
 
   return {
-    title: parsedTitle,
+    title: parsedTitle || 'Imported Recipe',
     yield: parsedYield,
     servings: parsedServings,
     prepTime: parsedPrepTime,
@@ -212,6 +253,21 @@ const parsePastedRecipe = (rawText: string) => {
   };
 };
 
+const buildImportIngredientError = (parsedRecipe: ReturnType<typeof parsePastedRecipe>) => {
+  return [
+    parsedRecipe.title ? '✓ Recipe title detected' : '✗ No recipe title detected',
+    '',
+    '✗ No ingredients detected',
+    '',
+    'Accepted examples:',
+    'Salt: 10 g',
+    'Salt | 盐 | 10 g',
+    '2斤芋头',
+    '鸡粉 5 g',
+    'Salt to taste'
+  ].join('\n');
+};
+
 const isYieldLine = (line: string) => /^(yield|makes|serves|servings)\s*[:：]/i.test(line.trim());
 
 const isLikelyRecipeTitleLine = (line: string) => {
@@ -225,7 +281,7 @@ const isLikelyRecipeTitleLine = (line: string) => {
 const toParsedImportedRecipe = (rawText: string, index: number): ParsedImportedRecipe | null => {
   const parsedRecipe = parsePastedRecipe(rawText);
 
-  if (!parsedRecipe.title || parsedRecipe.ingredients.length === 0 || parsedRecipe.method.length === 0) {
+  if (!parsedRecipe.title || parsedRecipe.ingredients.length === 0) {
     return null;
   }
 
@@ -774,18 +830,8 @@ export default function AddRecipeTab({
     setImportError('');
     const parsedRecipe = parsePastedRecipe(importText);
 
-    if (!parsedRecipe.title) {
-      setImportError('Could not find a recipe title.');
-      return;
-    }
-
     if (parsedRecipe.ingredients.length === 0) {
-      setImportError('Could not find any ingredients.');
-      return;
-    }
-
-    if (parsedRecipe.method.length === 0) {
-      setImportError('Could not find any method steps. Add a Method, Steps, Instructions, Directions, Procedure, or Preparation section.');
+      setImportError(buildImportIngredientError(parsedRecipe));
       return;
     }
 
@@ -835,7 +881,10 @@ export default function AddRecipeTab({
     if (recipe.chefNotes) setChefNotes(recipe.chefNotes);
     if (recipe.scannedImageDataUrl) setScannedImageDataUrl(recipe.scannedImageDataUrl);
     setIngredients(recipe.ingredients);
-    setMethodSteps(recipe.method);
+    setMethodSteps(recipe.method.length > 0
+      ? recipe.method
+      : [{ id: `step_import_blank_${Date.now()}`, stepNumber: 1, description: '', image: '' }]
+    );
   };
 
   const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
