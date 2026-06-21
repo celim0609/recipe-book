@@ -6,10 +6,11 @@
 import React, { useState } from 'react';
 import { ArrowDown, ArrowUp, Camera, FileText, Image as ImageIcon, MoreHorizontal, Plus, Trash2, X, Sparkles, Video } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist/webpack.mjs';
-import { Recipe, Ingredient, MethodStep, RecipeCategory } from '../types';
+import { Recipe, Ingredient, MethodStep, RecipeCategory, UserRole } from '../types';
 import { generateRecipeStepsWithAI, scanRecipeImageWithGemini } from '../services/gemini';
 import { normalizeIngredientForDisplay, parseIngredientLines } from '../utils/ingredientParser';
 import { FALLBACK_CATEGORY_NAME, getRecipeCategories, normalizeRecipeCategories } from '../utils/categoryUtils';
+import { canAccessKitchenDictionary, isKnownKitchenDictionaryIngredientName } from '../services/kitchenDictionary';
 
 const MAX_COVER_IMAGE_SIDE = 1200;
 const MAX_COVER_IMAGE_BYTES = 500 * 1024;
@@ -562,6 +563,7 @@ interface AddRecipeTabProps {
   onDeleteCategory: (categoryId: string, targetCategoryName: string) => void;
   initialRecipe?: Recipe | null;
   mode?: 'add' | 'edit';
+  userRole?: UserRole;
 }
 
 export default function AddRecipeTab({
@@ -572,7 +574,8 @@ export default function AddRecipeTab({
   onRenameCategory,
   onDeleteCategory,
   initialRecipe = null,
-  mode = 'add'
+  mode = 'add',
+  userRole = 'user'
 }: AddRecipeTabProps) {
   const isEditing = mode === 'edit' && initialRecipe;
 
@@ -606,6 +609,7 @@ export default function AddRecipeTab({
       ? initialRecipe.ingredients
       : [{ id: 'ing_1', name: '', qty: '', unit: '' }]
   );
+  const [importedIngredientIds, setImportedIngredientIds] = useState<string[]>([]);
 
   // Method steps state
   const [methodSteps, setMethodSteps] = useState<MethodStep[]>(
@@ -673,6 +677,13 @@ export default function AddRecipeTab({
     setIngredients(prev =>
       prev.map(ing => (ing.id === id ? { ...ing, [field]: value } : ing))
     );
+  };
+
+  const shouldShowAddToDictionary = (ingredient: Ingredient) => {
+    return canAccessKitchenDictionary(userRole)
+      && importedIngredientIds.includes(ingredient.id)
+      && Boolean(ingredient.name.trim())
+      && !isKnownKitchenDictionaryIngredientName(ingredient.name);
   };
 
   const categoryOptions = categories.filter(category => category.name !== FALLBACK_CATEGORY_NAME);
@@ -883,6 +894,7 @@ export default function AddRecipeTab({
     if (recipe.chefNotes) setChefNotes(recipe.chefNotes);
     if (recipe.scannedImageDataUrl) setScannedImageDataUrl(recipe.scannedImageDataUrl);
     setIngredients(recipe.ingredients);
+    setImportedIngredientIds(recipe.ingredients.map(ingredient => ingredient.id));
     setMethodSteps(recipe.method.length > 0
       ? recipe.method
       : [{ id: `step_import_blank_${Date.now()}`, stepNumber: 1, description: '', image: '' }]
@@ -1476,6 +1488,14 @@ export default function AddRecipeTab({
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+              {shouldShowAddToDictionary(ing) && (
+                <button
+                  type="button"
+                  className="col-span-2 sm:col-span-full justify-self-start rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary/10"
+                >
+                  Add to Kitchen Dictionary
+                </button>
+              )}
             </div>
           ))}
         </div>

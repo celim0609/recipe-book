@@ -938,6 +938,7 @@ export default function App() {
     try {
       await signOut(auth);
       setCurrentUser(null);
+      setCurrentUserRole('user');
       setIsGuestMode(false);
       setRecipes(loadLocalRecipes());
       setAddingRecipe(false);
@@ -973,6 +974,7 @@ export default function App() {
 
   const handleContinueAsGuest = () => {
     setCurrentUser(null);
+    setCurrentUserRole('user');
     setIsGuestMode(true);
     const localProfile = loadLocalProfile();
     setChefProfile(localProfile);
@@ -1207,6 +1209,7 @@ export default function App() {
             onDeleteCategory={handleDeleteCategory}
             onSave={handleSaveEditedRecipe}
             onCancel={handleCancelRecipeForm}
+            userRole={currentUserRole}
           />
         ) : addingRecipe ? (
           <AddRecipeTab
@@ -1216,6 +1219,7 @@ export default function App() {
             onDeleteCategory={handleDeleteCategory}
             onSave={handleSaveNewRecipe}
             onCancel={handleCancelRecipeForm}
+            userRole={currentUserRole}
           />
         ) : (
           renderTabContent()

@@ -20,7 +20,27 @@ const KITCHEN_DICTIONARY_INGREDIENTS = (ingredients as KitchenDictionaryIngredie
   .map(normalizeDictionaryEntry)
   .filter(entry => entry.chinese && entry.english);
 
+const normalizeDictionaryKey = (value: string) => value.trim().toLowerCase();
+
+const KITCHEN_DICTIONARY_LOOKUP = KITCHEN_DICTIONARY_INGREDIENTS.reduce<Record<string, KitchenDictionaryIngredient>>((acc, entry) => {
+  [
+    entry.chinese,
+    entry.english,
+    `${entry.english} (${entry.chinese})`,
+    ...entry.aliases
+  ].forEach(value => {
+    const key = normalizeDictionaryKey(value);
+    if (key) acc[key] = entry;
+  });
+
+  return acc;
+}, {});
+
 export const canAccessKitchenDictionary = (role: UserRole) => isAdminRole(role);
+
+export const isKnownKitchenDictionaryIngredientName = (name: string) => {
+  return Boolean(KITCHEN_DICTIONARY_LOOKUP[normalizeDictionaryKey(name)]);
+};
 
 export const getKitchenDictionaryIngredients = (role: UserRole): KitchenDictionaryIngredient[] => {
   if (!canAccessKitchenDictionary(role)) return [];
