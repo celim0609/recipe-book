@@ -1157,7 +1157,8 @@ export default function AddRecipeTab({
       collections: initialRecipe?.collections || [],
       createdAt: initialRecipe?.createdAt || new Date().toISOString(),
       tags: initialRecipe?.tags,
-      isFeatured: initialRecipe?.isFeatured
+      isFeatured: initialRecipe?.isFeatured,
+      visibility: initialRecipe?.visibility || 'private'
     };
 
     onSave(savedRecipe);
@@ -1481,6 +1482,16 @@ export default function AddRecipeTab({
             placeholder="e.g. 12 pcs, 20 servings, 1 loaf"
             className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface px-4 py-3.5 focus:ring-1 focus:ring-primary font-bold"
           />
+        </div>
+
+        <div className="bg-surface-container-low border border-surface-container p-4 rounded-2xl">
+          <p className="font-sans font-bold text-xs text-on-surface-variant/90 mb-2">Visibility</p>
+          <div className="font-sans text-sm font-extrabold text-primary">
+            🔒 Private
+          </div>
+          <p className="font-sans text-xs font-semibold text-on-surface-variant mt-1">
+            Only you can view this recipe.
+          </p>
         </div>
       </section>
 

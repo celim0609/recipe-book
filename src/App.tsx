@@ -161,6 +161,7 @@ const getFirestoreRecipePayload = (recipe: Recipe, user: User) => {
     ...recipeForFirestore,
     category: categories[0] || '',
     categories,
+    visibility: recipe.visibility || 'private',
     coverImage: imageUrl,
     imageUrl,
     userId: user.uid,
@@ -176,6 +177,7 @@ const normalizeLoadedRecipe = (recipe: Recipe) => {
     ...recipe,
     category: categories[0] === FALLBACK_CATEGORY_NAME ? '' : categories[0],
     categories: categories[0] === FALLBACK_CATEGORY_NAME ? [] : categories,
+    visibility: recipe.visibility || 'private',
     ingredients: Array.isArray(recipe.ingredients)
       ? recipe.ingredients.map(normalizeIngredientForDisplay)
       : [],

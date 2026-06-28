@@ -20,6 +20,13 @@ export interface MethodStep {
   description: string;
 }
 
+export type RecipeVisibility =
+  | "private"
+  | "team"
+  | "organization"
+  | "public"
+  | "marketplace";
+
 export interface Recipe {
   id: string;
   title: string;
@@ -46,6 +53,7 @@ export interface Recipe {
   createdAt?: string;
   tags?: string[];
   isFeatured?: boolean;
+  visibility?: RecipeVisibility;
 }
 
 export interface RecipeCategory {
