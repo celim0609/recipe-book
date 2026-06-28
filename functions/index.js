@@ -217,11 +217,19 @@ export const scanRecipeImage = onCall({
         },
         {
           text: [
-            'Extract one recipe from this image.',
+            'Understand one recipe from this image and return a structured professional recipe.',
+            'The source recipe may be written in any language.',
+            'Return all structured recipe data in professional culinary English, not literal translation.',
+            'Standardize recipe title, description, ingredient names, appropriate units, method steps, and notes into natural chef-facing English.',
+            'Use accepted culinary terms, for example: 白萝卜 = Daikon Radish, 生粉 = Cornstarch, 粘米粉 = Rice Flour, 麻油 = Sesame Oil, 蚝油 = Oyster Sauce, 鸡粉 = Chicken Powder.',
             'Return ONLY valid JSON with this exact shape:',
             '{"title":"","description":"","yield":"","servings":"","prepTime":"","cookTime":"","ingredients":[{"name":"","quantity":"","unit":""}],"method":[],"notes":""}',
-            'Use only text visibly present in the image.',
-            'If a field cannot be recognized, leave it blank.',
+            'Preserve quantities exactly when readable.',
+            'Convert ingredient units only when it is a standard culinary normalization that does not change meaning; otherwise preserve the written unit.',
+            'Do not transliterate ingredient names when a professional English culinary term exists.',
+            'If handwriting or text is unclear, never invent ingredients, quantities, times, or method details.',
+            'If a value is partially readable but uncertain, mark it with "[uncertain]" and include only the readable part.',
+            'If a field cannot be recognized at all, leave it blank.',
             'Do not guess, infer, add nutrition, add cost, or invent missing recipe details.'
           ].join(' ')
         }
@@ -300,9 +308,12 @@ ${ingredientLines}
 Rules:
 - Return only a JSON array of strings.
 - Generate method steps only.
+- Write every step in professional culinary English.
+- Do not perform literal translation; use natural chef-facing cooking terminology.
 - Do not generate nutrition.
 - Do not generate cost.
 - Do not generate new recipe ideas.
+- If the supplied title or ingredients contain uncertain values, preserve that uncertainty instead of inventing missing details.
 - Keep steps practical, concise, and editable.
 `;
 
