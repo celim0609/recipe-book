@@ -821,7 +821,7 @@ export default function App() {
     setEditingRecipe(null);
   };
 
-  const handleToggleFavorite = (recipeId: string) => {
+  const handleToggleFavorite = async (recipeId: string) => {
     const updatedRecipes = recipes.map(recipe =>
       recipe.id === recipeId ? { ...recipe, isSaved: !recipe.isSaved } : recipe
     );
@@ -830,6 +830,22 @@ export default function App() {
     const updatedSelectedRecipe = updatedRecipes.find(recipe => recipe.id === selectedRecipe?.id);
     if (updatedSelectedRecipe) {
       setSelectedRecipe(updatedSelectedRecipe);
+    }
+
+    if (currentUser && db && !isGuestMode) {
+      const updatedRecipe = updatedRecipes.find(recipe => recipe.id === recipeId);
+      if (!updatedRecipe) return;
+
+      try {
+        await saveRecipeToFirestore(updatedRecipe, currentUser);
+      } catch (err) {
+        saveRecipesToStorage(recipes);
+        const previousSelectedRecipe = recipes.find(recipe => recipe.id === selectedRecipe?.id);
+        if (previousSelectedRecipe) {
+          setSelectedRecipe(previousSelectedRecipe);
+        }
+        triggerNotification('Could not update favorite. Please try again.', 'error');
+      }
     }
   };
 
