@@ -80,8 +80,8 @@ const normalizeScannedRecipe = (parsed: unknown): GeminiScannedRecipe => {
         }
         const ingredient = item as Record<string, unknown>;
         return {
-          name: readString(ingredient.name),
-          quantity: readString(ingredient.quantity),
+          name: readString(ingredient.name || ingredient.ingredientName || ingredient.ingredient || ingredient.item),
+          quantity: readString(ingredient.quantity || ingredient.qty || ingredient.amount),
           unit: readString(ingredient.unit)
         };
       })

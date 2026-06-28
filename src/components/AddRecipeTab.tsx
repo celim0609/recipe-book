@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, Camera, FileText, Image as ImageIcon, MoreHorizonta
 import * as pdfjsLib from 'pdfjs-dist/webpack.mjs';
 import { Recipe, Ingredient, MethodStep, RecipeCategory, UserRole } from '../types';
 import { generateRecipeStepsWithAI, scanRecipeImageWithGemini } from '../services/gemini';
+import type { GeminiScannedIngredient } from '../services/gemini';
 import { normalizeIngredientForDisplay, parseIngredientLines } from '../utils/ingredientParser';
 import { FALLBACK_CATEGORY_NAME, getRecipeCategories, normalizeRecipeCategories } from '../utils/categoryUtils';
 import { canCreateKitchenDictionaryEntry, createKitchenDictionaryEntry, isKnownKitchenDictionaryIngredientName } from '../services/kitchenDictionary';
@@ -375,15 +376,28 @@ const normalizeAiNumber = (value: number | string | null | undefined, parser = p
   return null;
 };
 
+const mapScannedIngredientToEditorIngredient = (
+  ingredient: GeminiScannedIngredient,
+  index: number
+): Ingredient => {
+  return normalizeIngredientForDisplay({
+    id: `ing_scan_${Date.now()}_${index}`,
+    name: ingredient.name.trim(),
+    qty: ingredient.quantity.trim(),
+    unit: ingredient.unit.trim(),
+    notes: ''
+  });
+};
+
 const extractStructuredRecipeFromScan = async (
   file: File,
   scannedImageDataUrl: string,
   onStage?: (stage: 'reading' | 'extracting') => void
 ): Promise<ParsedImportedRecipe> => {
   const scannedRecipe = await scanRecipeImageWithGemini({ file, imageDataUrl: scannedImageDataUrl, onStage });
-  const ingredientLines = scannedRecipe.ingredients.map(ingredient =>
-    [ingredient.quantity, ingredient.unit, ingredient.name].filter(Boolean).join(' ')
-  );
+  const scannedIngredients = scannedRecipe.ingredients
+    .map(mapScannedIngredientToEditorIngredient)
+    .filter(ingredient => ingredient.name || ingredient.qty || ingredient.unit);
   const methodLines = scannedRecipe.method;
   const title = scannedRecipe.title.trim();
 
@@ -397,7 +411,7 @@ const extractStructuredRecipeFromScan = async (
     cookTime: normalizeAiNumber(scannedRecipe.cookTime),
     chefNotes: scannedRecipe.notes.trim(),
     scannedImageDataUrl,
-    ingredients: parseIngredientLines(ingredientLines),
+    ingredients: scannedIngredients,
     method: methodLines
       .map(line => cleanImportedLine(String(line)))
       .filter(Boolean)
@@ -415,7 +429,9 @@ const extractStructuredRecipeFromScan = async (
       scannedRecipe.cookTime ? `Cook Time: ${scannedRecipe.cookTime}` : '',
       '',
       'Ingredients',
-      ...ingredientLines,
+      ...scannedRecipe.ingredients.map(ingredient =>
+        [ingredient.name, ingredient.quantity, ingredient.unit].filter(Boolean).join(' ')
+      ),
       '',
       'Method',
       ...methodLines,
