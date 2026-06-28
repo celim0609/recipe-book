@@ -376,6 +376,19 @@ const normalizeAiNumber = (value: number | string | null | undefined, parser = p
   return null;
 };
 
+const parseRequiredNumberField = (value: string, label: string, options: { allowZero: boolean; integer?: boolean }) => {
+  const trimmed = value.trim();
+  if (!trimmed) return `${label} is required.`;
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return `${label} must be a valid number.`;
+  if (parsed < 0) return `${label} cannot be negative.`;
+  if (!options.allowZero && parsed === 0) return `${label} must be greater than zero.`;
+  if (options.integer && !Number.isInteger(parsed)) return `${label} must be a whole number.`;
+
+  return parsed;
+};
+
 const mapScannedIngredientToEditorIngredient = (
   ingredient: GeminiScannedIngredient,
   index: number
@@ -608,9 +621,9 @@ export default function AddRecipeTab({
   const [openCategoryMenuId, setOpenCategoryMenuId] = useState<string | null>(null);
   const [renamingCategory, setRenamingCategory] = useState<RecipeCategory | null>(null);
   const [renameCategoryName, setRenameCategoryName] = useState('');
-  const [prepTime, setPrepTime] = useState<number>(initialRecipe?.prepTime || 30);
-  const [cookTime, setCookTime] = useState<number>(initialRecipe?.cookTime || 0);
-  const [servings, setServings] = useState<number>(initialRecipe?.servings || 2);
+  const [prepTime, setPrepTime] = useState(String(initialRecipe?.prepTime ?? 30));
+  const [cookTime, setCookTime] = useState(String(initialRecipe?.cookTime ?? 0));
+  const [servings, setServings] = useState(String(initialRecipe?.servings ?? 2));
   const [recipeYield, setRecipeYield] = useState(initialRecipe?.yield || (initialRecipe ? `${initialRecipe.servings} servings` : ''));
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>(initialRecipe?.difficulty || 'Easy');
   
@@ -924,9 +937,9 @@ export default function AddRecipeTab({
     setTitle(recipe.title);
     if (recipe.description) setStory(recipe.description);
     setRecipeYield(recipe.yield || recipeYield);
-    if (recipe.servings) setServings(recipe.servings);
-    if (recipe.prepTime) setPrepTime(recipe.prepTime);
-    if (recipe.cookTime) setCookTime(recipe.cookTime);
+    if (recipe.servings) setServings(String(recipe.servings));
+    if (recipe.prepTime) setPrepTime(String(recipe.prepTime));
+    if (recipe.cookTime !== null && recipe.cookTime !== undefined) setCookTime(String(recipe.cookTime));
     if (recipe.chefNotes) setChefNotes(recipe.chefNotes);
     if (recipe.scannedImageDataUrl) setScannedImageDataUrl(recipe.scannedImageDataUrl);
     const normalizedImportedIngredients = recipe.ingredients.map(normalizeIngredientForDisplay);
@@ -1099,7 +1112,25 @@ export default function AddRecipeTab({
     const finalCategories = savedCategories;
     const primaryCategory = finalCategories[0] || '';
 
-    const savedServings = Number(servings) || 2;
+    const validatedServings = parseRequiredNumberField(servings, 'Servings', { allowZero: false, integer: true });
+    if (typeof validatedServings === 'string') {
+      alert(validatedServings);
+      return;
+    }
+
+    const validatedPrepTime = parseRequiredNumberField(prepTime, 'Prep Time', { allowZero: false });
+    if (typeof validatedPrepTime === 'string') {
+      alert(validatedPrepTime);
+      return;
+    }
+
+    const validatedCookTime = parseRequiredNumberField(cookTime, 'Cook Time', { allowZero: true });
+    if (typeof validatedCookTime === 'string') {
+      alert(validatedCookTime);
+      return;
+    }
+
+    const savedServings = validatedServings;
 
     const savedRecipe: Recipe = {
       id: initialRecipe?.id || `recipe_${Date.now()}`,
@@ -1110,8 +1141,8 @@ export default function AddRecipeTab({
       scannedImageDataUrl: scannedImageDataUrl || undefined,
       category: primaryCategory,
       categories: finalCategories,
-      prepTime: Number(prepTime) || 30,
-      cookTime: Number(cookTime) || undefined,
+      prepTime: validatedPrepTime,
+      cookTime: validatedCookTime || undefined,
       servings: savedServings,
       yield: recipeYield.trim() || `${savedServings} servings`,
       difficulty,
@@ -1388,7 +1419,7 @@ export default function AddRecipeTab({
                 type="number"
                 min="5"
                 value={prepTime}
-                onChange={e => setPrepTime(Number(e.target.value))}
+                onChange={e => setPrepTime(e.target.value)}
                 placeholder="30"
                 className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface pl-4 pr-12 py-3.5 focus:ring-1 focus:ring-primary font-bold"
               />
@@ -1405,7 +1436,7 @@ export default function AddRecipeTab({
                 type="number"
                 min="0"
                 value={cookTime}
-                onChange={e => setCookTime(Number(e.target.value))}
+                onChange={e => setCookTime(e.target.value)}
                 placeholder="0"
                 className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface pl-4 pr-12 py-3.5 focus:ring-1 focus:ring-primary font-bold"
               />
@@ -1421,7 +1452,7 @@ export default function AddRecipeTab({
               type="number"
               min="1"
               value={servings}
-              onChange={e => setServings(Number(e.target.value))}
+              onChange={e => setServings(e.target.value)}
               placeholder="2"
               className="w-full bg-surface-container border-none rounded-xl font-sans text-xs sm:text-sm text-on-surface px-4 py-3.5 focus:ring-1 focus:ring-primary font-bold"
             />
